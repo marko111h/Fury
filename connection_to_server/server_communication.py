@@ -63,6 +63,7 @@ def map_request(sock):
         json_data = response[8:8 + data_length].decode('utf-8')
         mapa_data = json.loads(json_data)
         print("Map data:", mapa_data)
+        return mapa_data
     else:
         error_length = int.from_bytes(response[4:8], 'little')
         error_message = response[8:8 + error_length].decode('utf-8')

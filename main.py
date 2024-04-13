@@ -2,6 +2,7 @@ import pygame
 import requests
 import json
 import socket
+from map_display.map_plot import plot_hexagonal_map
 
 from connection_to_server.server_communication import (
     login_request,
@@ -43,7 +44,9 @@ def main():
 
         # 3. Testing MAP request
         print("Testing MAP request:")
-        map_request(sock)
+        map_data = map_request(sock)
+        if map_data:
+            plot_hexagonal_map(map_data)
 
         # 2. Testing GAME_STATE request
         print("\nTesting GAME_STATE request:")
