@@ -1,6 +1,26 @@
 import socket
 import json
 
+def login_multiple_players(names,server_address):
+    players_info = {}
+    for name in names:
+        # Create a new socket for each player
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(server_address)
+
+        # login player
+        response_data = login_request(name,sock)
+
+        if response_data:
+            print(f"Succesful login for player {name}")
+            players_info[name] = {
+                "socket": sock,
+                "response_data": response_data
+            }
+        else:
+            print(f"Login failed for player {name}")
+            sock.close()
+    return players_info
 def login_request(name,sock):
     # server_address = ("wgforge-srv.wargaming.net", 443)
     # sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

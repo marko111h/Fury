@@ -2,9 +2,13 @@ import pygame
 import requests
 import json
 import socket
+import math
 from map_display.map_plot import plot_hexagonal_map
+from scripts.map import draw_hex_grid
+from scripts.map import screen
 
 from connection_to_server.server_communication import (
+login_multiple_players,
     login_request,
     logout_request,
     map_request,
@@ -26,27 +30,30 @@ def main():
     # connect on server
     sock.connect(server_address)
 
+    player_names = ["Marko", "Player1", "Player2"]
     try:
         # # connecting with server
         # sock.connect(server_address)
 
-        # 1. Login
-        response_data = login_request("Marko", sock)
+        players_info = login_multiple_players(player_names, server_address)
+        print(f"{players_info}")
 
-        if response_data:
-            print(f"Succesfull log in {response_data}")
-        else:
-            print("Login Fail")
+        player1_socket = players_info["Player1"]["socket"]
+        print(f"{player1_socket} ")
+
+        # response_data = login_request("Marko", sock)
+        #
+        # if response_data:
+        #     print(f"Succesfull log in {response_data}")
+        # else:
+        #     print("Login Fail")
+
 
         # # 2. Logout request
         # print("\nTesting LOGOUT request:")
         # logout_request(sock)
 
-        # 3. Testing MAP request
-        print("Testing MAP request:")
-        map_data = map_request(sock)
-        if map_data:
-            plot_hexagonal_map(map_data)
+
 
         # 2. Testing GAME_STATE request
         print("\nTesting GAME_STATE request:")
@@ -72,6 +79,34 @@ def main():
         # 7. Testing SHOOT request
         print("\nTesting SHOOT request:")
         shoot_request(sock, vehicle_id=1, target={"x": -1, "y": -1, "z": 2})
+        # # 3. Testing MAP request
+        # print("Testing MAP request:")
+        # map_data = map_request(sock)
+        # if map_data:
+        #     plot_hexagonal_map(map_data)
+        map_data = map_request(sock)
+
+        if map_data:
+            print("Map data received.")
+        else:
+            print("Failed to retrieve map data.")
+
+        # Glavna petlja
+        running = True
+        while running:
+            # Obrada događaja
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+
+            # Očistite ekran
+            screen.fill((0, 0, 0))  # Crna pozadina
+
+            # Pozovite funkciju za crtanje heksagonalne mreže
+            draw_hex_grid(screen, map_data)
+
+            # Osvježite ekran
+            pygame.display.flip()
     except Exception as e:
         print(f"Error during connection or request: {e}")
     finally:
