@@ -9,11 +9,11 @@ class GameClient:
     """
 
     def __init__(self):
-        self.radius: int  # alias from server: size
-        self.grid: Grid
-        self.players: List[Player]
-        self.players_capturing_base: List[Player] = []
-        self.base: List[Tuple[int, int]] = [(0, 0)]
+        self.__radius: int  # alias from server: size
+        self.__grid: Grid
+        self.__players: List[Player]
+        self.__players_capturing_base: List[Player] = []
+        self.__base: List[Tuple[int, int]] = [(0, 0)]
 
     def __update__(self):
         pass
