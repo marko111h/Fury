@@ -20,7 +20,19 @@ class GameClient:
         TIMEOUT = 4
         INTERNAL_SERVER_ERROR = 500
 
-    def __init__(self, player: Player):
+    class Action(Enum):
+        LOGIN = 1
+        LOGOUT = 2
+        MAP = 3
+        GAME_STATE = 4
+        GAME_ACTIONS = 5
+        TURN = 6
+        CHAT = 100
+        MOVE = 101
+        SHOOT = 102
+
+    def __init__(self, player: Player, client_socket: socket):
+        self.__client_socket: socket = client_socket
         self.__grid: Grid
         self.__players: List[Player] = [player]  # stored in order of playing turns
         self.__players_capturing_base: List[Player] = []
@@ -57,35 +69,47 @@ class GameClient:
         # separators to remove spaces between key and value
         json_params: str = json.dumps(filtered_params, separators=(',', ':'))
         json_params_len: int = len(json_params)
-        action_code: bytes = b'\x01\x00\x00\x00'
+        action_code: bytes = GameClient.Action.LOGIN.value.to_bytes(4, byteorder="little", signed=False)
         login_request: bytes = (action_code + json_params_len.to_bytes(4, byteorder="little", signed=False)
                                 + json_params.encode('utf-8'))
+        client_socket: socket = None
+        try:
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.connect(GameClient.server_address)
+            client_socket.sendall(login_request)
 
-        client_socket: socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.connect(GameClient.server_address)
-        client_socket.sendall(login_request)
+            # Receiving result code as bytes
+            result_code: bytes = client_socket.recv(4)
 
-        # Receiving result code as bytes
-        result_code: bytes = client_socket.recv(4)
+            # Converting bytes into Enum
+            result_enum: GameClient.Result = GameClient.Result(
+                int.from_bytes(result_code, byteorder="little", signed=False)
+            )
+            print("Login result:", result_enum.name)
 
-        # Converting bytes into Enum
-        result_enum: GameClient.Result = GameClient.Result(
-            int.from_bytes(result_code, byteorder="little", signed=False)
-        )
-        print("Login result:", result_enum.name)
-
-        if result_enum != GameClient.Result.OKEY:
+            if result_enum != GameClient.Result.OKEY:
+                return None
+            # Read the length of JSON with data
+            json_data_length: bytes = client_socket.recv(4)
+            json_bytes: bytes = client_socket.recv(int.from_bytes(json_data_length, byteorder="little", signed=False))
+            json_data: Dict = json.loads(json_bytes.decode('utf-8'))
+            player_id: int = json_data["idx"]
+            player_name: str = json_data["name"]
+            print("Logged in player")
+            print("Name:", player_name, ", id:", player_id)
+            # TODO: create game with provided through args settings
+            return GameClient(Player(player_id, player_name), client_socket)
+        except socket.error as e:
+            print(f"Socket error: {e}")
+            if client_socket:
+                client_socket.close()
             return None
-        # Read the length of JSON with data
-        json_data_length: bytes = client_socket.recv(4)
-        json_bytes: bytes = client_socket.recv(int.from_bytes(json_data_length, byteorder="little", signed=False))
-        json_data: Dict = json.loads(json_bytes.decode('utf-8'))
-        player_id: int = json_data["idx"]
-        player_name: str = json_data["name"]
-        print("Logged in player")
-        print("Name:", player_name, ", id:", player_id)
-        # TODO: create game with provided through args settings
-        return GameClient(Player(player_id, player_name))
+
+    def logout(self):
+        """ Logouts the player from the game. game_client is meaningless
+        :return:
+        """
+        request: bytes = GameClient.Action.LOGOUT.value.to_bytes(4, byteorder="little", signed=False)
 
 
 def main():
