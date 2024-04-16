@@ -20,9 +20,9 @@ class GameClient:
         TIMEOUT = 4
         INTERNAL_SERVER_ERROR = 500
 
-    def __init__(self):
+    def __init__(self, player: Player):
         self.__grid: Grid
-        self.__players: List[Player]  # stored in order of playing turns
+        self.__players: List[Player] = [player]  # stored in order of playing turns
         self.__players_capturing_base: List[Player] = []
         self.__base: List[Tuple[int, int]]
         self.name = None
@@ -31,17 +31,16 @@ class GameClient:
     def __update__(self):
         pass
 
-    # if you make it @classmethod or just method remove first param
-    # from locals dictionary
-    @staticmethod
-    def login(name: str, password: Optional[str] = None,
+    @classmethod
+    def login(cls, name: str, password: Optional[str] = None,
               game: Optional[str] = None, num_turns: Optional[int] = None,
               num_players: Optional[int] = None, is_observer: Optional[bool] = None,
-              is_full: Optional[bool] = None) -> Optional[Tuple['GameClient', Player]]:
+              is_full: Optional[bool] = None) -> Optional['GameClient']:
         # copies dictionary of names and values
         # for all local variables (in our case parameters)
         params = locals().copy()
-
+        # because it is classmethod we need to remove first parameter
+        params.pop("cls")
         # removes every None from calls like: login("Boris", password = None)
         filtered_params = {key: value for key, value in params.items()
                            if value is not None}
@@ -63,7 +62,7 @@ class GameClient:
         result_enum: GameClient.Result = GameClient.Result(
             int.from_bytes(result_code, byteorder="little", signed=False)
         )
-        print(result_enum.name)
+        print("Login result:", result_enum.name)
 
         if result_enum != GameClient.Result.OKEY:
             return None
@@ -73,10 +72,13 @@ class GameClient:
         json_data: Dict = json.loads(json_bytes.decode('utf-8'))
         player_id: int = json_data["idx"]
         player_name: str = json_data["name"]
-        return GameClient(), Player(player_id, player_name)
+        print("Logged in player")
+        print("Name:", player_name, ", id:", player_id)
+        return GameClient(Player(player_id, player_name))
+
 
 def main():
-    GameClient.login("Boris")
+    game_client: GameClient = GameClient.login("Boris")
 
 
 if __name__ == "__main__":
