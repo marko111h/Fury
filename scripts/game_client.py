@@ -36,6 +36,16 @@ class GameClient:
               game: Optional[str] = None, num_turns: Optional[int] = None,
               num_players: Optional[int] = None, is_observer: Optional[bool] = None,
               is_full: Optional[bool] = None) -> Optional['GameClient']:
+        """ Sends login request to the server
+        :param name: name of the player
+        :param password: user's password, default: no password
+        :param game: game's name, default: no name
+        :param num_turns: number of turns to be played, default: default value
+        :param num_players: number of players in the game, default: 1
+        :param is_observer: defines if observer joins server just to watch, default: False
+        :param is_full: defines if player wants to play full game with all order combinations, default: False
+        :return: new game with provided settings
+        """
         # copies dictionary of names and values
         # for all local variables (in our case parameters)
         params = locals().copy()
@@ -74,6 +84,7 @@ class GameClient:
         player_name: str = json_data["name"]
         print("Logged in player")
         print("Name:", player_name, ", id:", player_id)
+        # TODO: create game with provided through args settings
         return GameClient(Player(player_id, player_name))
 
 
