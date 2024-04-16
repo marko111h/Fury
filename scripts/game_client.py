@@ -1,9 +1,128 @@
 from grid import Grid
-from player import Player
 from typing import List, Tuple, Optional, Dict
 import json
 import socket
 from enum import Enum
+
+# To run the code
+# class Tank:
+#     def __init__(self, id, curr_position, spawn_position, capture_points, speed_points, hit_points, fire_power,
+#                  destruction_points, owner):
+#         self.id = id
+#         self.curr_position = curr_position
+#         self.spawn_position = spawn_position
+#         self.capture_points = capture_points
+#         self.speed_points = speed_points
+#         self.starting_hit_points = hit_points  # added this beacuse we will need it in respawning
+#         self.hit_points = hit_points
+#         self.fire_power = fire_power
+#         self.destruction_points = destruction_points
+#         self.owner = owner
+#         self.prev_attacker = None
+#         self.order_position = None
+#
+#     def get_id(self):
+#         return self.id
+#
+#     def get_curr_position(self):
+#         return self.curr_position
+#
+#     def get_spawn_position(self):
+#         return self.spawn_position
+#
+#     def get_capture_points(self):
+#         return self.capture_points
+#
+#     def get_speed_points(self):
+#         return self.speed_points
+#
+#     def get_starting_hit_points(self):
+#         return self.starting_hit_points
+#
+#     def get_hit_points(self):
+#         return self.hit_points
+#
+#     def get_fire_power(self):
+#         return self.fire_power
+#
+#     def get_destruction_points(self):
+#         return self.destruction_points
+#
+#     def get_owner(self):
+#         return self.owner
+#
+#     def get_prev_attacker(self):
+#         return self.prev_attacker
+#
+#     def get_order_position(self):
+#         return self.order_position
+#
+#     def add_destruction_points(self, value):
+#         self.destruction_points += value
+#
+#     def shoot(self, target):
+#         target.take_damage(self)
+#
+#     def move(self, new_position):
+#         self.curr_position = new_position
+#
+#         if new_position not in []:
+#             self.capture_points = 0
+#
+#     def earn_capture_point(self):
+#         if self.curr_position in []:
+#             self.capture_points += 1
+#
+#     def take_damage(self, shooter):
+#         self.hit_points -= 1
+#
+#         if self.hit_points == 0:
+#             self.capture_points = 0
+#             self.curr_position = self.spawn_position
+#             self.hit_points = self.starting_hit_points
+#             shooter.add_destruction_points(self.hit_points)
+#
+#
+# class Player:
+#     def __init__(self, player_id, name):
+#         # Basic player attributes
+#         self.player_id = player_id
+#         self.name = name
+#
+#         # Points for destroying vehicles and capturing bases
+#         self.destruction_points = 0
+#         self.base_capture_points = 0
+#
+#         # Players vehicles
+#         self.vehicles = []
+#
+#     def add_vehicle(self, vehicle):
+#         """Adds a vehicle to the player's ownership."""
+#         self.vehicles.append(vehicle)
+#
+#     def remove_vehicle(self,vehicle):
+#         """Removes the vehicle from player ownership."""
+#         self.vehicles.remove(vehicle)
+#
+#     def earn_destruction_points(self, points):
+#         """Increases destruction points."""
+#         self.destruction_points += points
+#
+#     def lose_destruction_points(self, points):
+#         """Reduces destruction points."""
+#         self.destruction_points -= points
+#
+#     def earn_base_capture_points(self, points):
+#         """Increases points for capturing the base."""
+#         self.base_capture_points += points
+#
+#     def lose_base_capture_points(self, points):
+#         """Reduces points for capturing a base."""
+#         self.base_capture_points -= points
+#
+#     def __str__(self):
+#         """Returns player information as a string."""
+#         return f"Player: {self.name}, ID: {self.player_id}, Destruction Points: {self.destruction_points}, Base Capture Points: {self.base_capture_points}"
 
 
 class GameClient:
@@ -40,9 +159,11 @@ class GameClient:
         self.__name = None
         self.__rounds = 15
         self.__turns = 10
-        self.__cur_round = 0
-        self.__current_turn = 0
-        self.__current_player_index = 0
+        self.__cur_round = 1  # rounds start with 1
+        self.__cur_turn = 0  # turns start with 0
+        self.__cur_player_index = 0
+
+        self.update_game_state()
 
     @staticmethod
     def __send_request__(client_socket: socket, action: 'GameClient.Action' , json_data: str = "") -> None:
@@ -138,21 +259,41 @@ class GameClient:
         finally:
             self.__client_socket.close()
 
-    # def update_game_state(self):
-    #     data_len: int = 0
-    #     game_state_request: bytes = (GameClient.Action.GAME_STATE.value.to_bytes(4, byteorder="little")
-    #                                  + data_len.to_bytes(4, byteorder="little"))
-    #     try:
-    #         self.__client_socket.sendall(game_state_request)
-    #         result_code: bytes = self.__client_socket.recv(4)
-    #         result_enum: GameClient.Result = GameClient.Result(
-    #             int.from_bytes(result_code, byteorder="little")
-    #         )
-    #         print("Game State request result:", result_enum.name)
-    #         if result_enum == GameClient.Result.OKEY:
-    #
-    #     except socket.error as e:
-    #         pass
+    def update_game_state(self) -> None:
+        """ Updates the state of the game by requesting GAME_STATE
+        """
+        try:
+            GameClient.__send_request__(self.__client_socket, GameClient.Action.GAME_STATE)
+            result_enum, json_game_state = GameClient.__process_response__(self.__client_socket)
+            print("Game State request result:", result_enum.name)
+
+            if result_enum == GameClient.Result.OKEY:
+                self.__turns = json_game_state["num_turns"]
+                self.__rounds = json_game_state["num_rounds"]
+                self.__cur_turn = json_game_state["current_turn"]
+                self.__cur_round = json_game_state["current_round"]
+                self.__players.clear()
+                for player in json_game_state["players"]:
+                    self.__players.append(Player(player["idx"], player["name"]))
+                    print(player["idx"], player["name"])
+                vehicles = json_game_state["vehicles"]
+                # key: vehicle id, value: vehicle features as dictionary
+                for key, value in vehicles.items():
+                    owner: Player = Player(-1, "Nobody")
+                    # search for owner by id
+                    for player in self.__players:
+                        if player.player_id == value["player_id"]:
+                            owner = player
+                        break
+                    vehicle = Tank(key, value["position"], value["spawn_position"],
+                                   value["capture_points"], 2, 2, 1,
+                                   2, owner)
+                    owner.add_vehicle(vehicle)
+                # TODO: order players correctly, finished, attack matrix, winner, win_points
+                # TODO: player_result_points, catapult_usage
+
+        except socket.error as e:
+            print(f"Socket error: {e}")
 
 
 def main():
