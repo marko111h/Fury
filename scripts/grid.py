@@ -1,3 +1,8 @@
+class Vec2:
+    def __init__(self, q: int, r: int):
+        self.q = q
+        self.r = r
+
 class Grid:
     def __init__(self, radius: int):
         self.__radius = radius
@@ -22,6 +27,29 @@ class Grid:
     def set(self, q: int, r: int, value):
         self.__list[self.__index_function(q, r)] = value
 
+    def get_size(self):
+        return self.__radius
+
     @staticmethod
     def get_z(q: int, r: int):
         return -q - r
+
+    @staticmethod
+    def get_dist(a: Vec2, b: Vec2):
+        return (abs(a.q - b.q) + abs(a.q + a.r - b.q - b.r) + abs(a.r - b.r)) / 2
+
+    @staticmethod
+    def get_point_south(a: Vec2, dist: int) -> Vec2:
+        return Vec2(a.q, a.r + dist)
+
+    @staticmethod
+    def get_point_south_east(a: Vec2, dist: int) -> Vec2:
+        return Vec2(a.q + dist, a.r)
+
+    @staticmethod
+    def get_point_south_west(a: Vec2, dist: int) -> Vec2:
+        return Vec2(a.q - dist, a.r + dist)
+
+    @staticmethod
+    def is_reachable(self, a: Vec2, b: Vec2) -> bool:
+        return True #TODO: Implement
