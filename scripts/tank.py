@@ -71,6 +71,7 @@ class Tank:
 
     def take_damage(self, shooter):
         self.hit_points -= 1
+        self.prev_attacker = shooter
 
         if self.hit_points == 0:
             self.capture_points = 0
