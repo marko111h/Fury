@@ -1,6 +1,6 @@
 from grid import Grid
 from player import Player
-from typing import List, Tuple, Optional, Dict, Union
+from typing import List, Tuple, Optional, Dict
 import json
 import socket
 from enum import Enum
@@ -37,8 +37,40 @@ class GameClient:
         self.__players: List[Player] = [player]  # stored in order of playing turns
         self.__players_capturing_base: List[Player] = []
         self.__base: List[Tuple[int, int]]
-        self.name = None
-        self.rounds = 15
+        self.__name = None
+        self.__rounds = 15
+        self.__turns = 10
+        self.__cur_round = 0
+        self.__current_turn = 0
+        self.__current_player_index = 0
+
+    @staticmethod
+    def __send_request__(client_socket: socket, action: 'GameClient.Action' , json_data: str = "") -> None:
+        request: bytes = (action.value.to_bytes(4, byteorder="little")
+                          + len(json_data).to_bytes(4, byteorder="little"))
+        if json_data != "":
+            request += json_data.encode('utf-8')
+        print(request)
+        client_socket.sendall(request)
+
+    @staticmethod
+    def __process_response__(client_socket: socket) -> Tuple['GameClient.Result', Optional[Dict]]:
+        # Receiving result code as bytes
+        result_code: bytes = client_socket.recv(4)
+
+        # Converting bytes into Enum
+        result_enum: GameClient.Result = GameClient.Result(
+            int.from_bytes(result_code, byteorder="little")
+        )
+        # Read the length of JSON with data
+        json_data_length: int = int.from_bytes(client_socket.recv(4), byteorder="little")
+
+        if result_enum != GameClient.Result.OKEY or json_data_length == 0:
+            return result_enum, None
+
+        json_bytes: bytes = client_socket.recv(json_data_length)
+        json_data: Dict = json.loads(json_bytes.decode('utf-8'))
+        return result_enum, json_data
 
     def __update__(self):
         pass
@@ -68,31 +100,20 @@ class GameClient:
                            if value is not None}
         # separators to remove spaces between key and value
         json_params: str = json.dumps(filtered_params, separators=(',', ':'))
-        json_params_len: int = len(json_params)
-        action_code: bytes = GameClient.Action.LOGIN.value.to_bytes(4, byteorder="little", signed=False)
-        login_request: bytes = (action_code + json_params_len.to_bytes(4, byteorder="little", signed=False)
-                                + json_params.encode('utf-8'))
+
         client_socket: socket = None
         try:
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.connect(GameClient.server_address)
-            client_socket.sendall(login_request)
+            # sends login request to the server
+            GameClient.__send_request__(client_socket, GameClient.Action.LOGIN, json_params)
+            # gets response from the server
+            result_enum, json_data = GameClient.__process_response__(client_socket)
 
-            # Receiving result code as bytes
-            result_code: bytes = client_socket.recv(4)
-
-            # Converting bytes into Enum
-            result_enum: GameClient.Result = GameClient.Result(
-                int.from_bytes(result_code, byteorder="little", signed=False)
-            )
             print("Login result:", result_enum.name)
 
             if result_enum != GameClient.Result.OKEY:
                 return None
-            # Read the length of JSON with data
-            json_data_length: bytes = client_socket.recv(4)
-            json_bytes: bytes = client_socket.recv(int.from_bytes(json_data_length, byteorder="little", signed=False))
-            json_data: Dict = json.loads(json_bytes.decode('utf-8'))
             player_id: int = json_data["idx"]
             player_name: str = json_data["name"]
             print("Logged in player")
@@ -108,23 +129,30 @@ class GameClient:
     def logout(self) -> None:
         """ Logouts the player from the game and closes the socket
         """
-        data_len: int = 0
-        logout_request: bytes = (GameClient.Action.LOGOUT.value.to_bytes(4, byteorder="little", signed=False)
-                                 + data_len.to_bytes(4, byteorder="little", signed=False))
         try:
-            self.__client_socket.sendall(logout_request)
-
-            # Receiving result code as bytes
-            result_code: bytes = self.__client_socket.recv(4)
-            # Converting bytes into Enum
-            result_enum: GameClient.Result = GameClient.Result(
-                int.from_bytes(result_code, byteorder="little", signed=False)
-            )
+            GameClient.__send_request__(self.__client_socket, GameClient.Action.LOGOUT)
+            result_enum, _ = GameClient.__process_response__(self.__client_socket)
             print("Logout result:", result_enum.name)
         except socket.error as e:
             print(f"Socket error: {e}")
         finally:
             self.__client_socket.close()
+
+    # def update_game_state(self):
+    #     data_len: int = 0
+    #     game_state_request: bytes = (GameClient.Action.GAME_STATE.value.to_bytes(4, byteorder="little")
+    #                                  + data_len.to_bytes(4, byteorder="little"))
+    #     try:
+    #         self.__client_socket.sendall(game_state_request)
+    #         result_code: bytes = self.__client_socket.recv(4)
+    #         result_enum: GameClient.Result = GameClient.Result(
+    #             int.from_bytes(result_code, byteorder="little")
+    #         )
+    #         print("Game State request result:", result_enum.name)
+    #         if result_enum == GameClient.Result.OKEY:
+    #
+    #     except socket.error as e:
+    #         pass
 
 
 def main():
