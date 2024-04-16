@@ -105,15 +105,31 @@ class GameClient:
                 client_socket.close()
             return None
 
-    def logout(self):
-        """ Logouts the player from the game. game_client is meaningless
-        :return:
+    def logout(self) -> None:
+        """ Logouts the player from the game and closes the socket
         """
-        request: bytes = GameClient.Action.LOGOUT.value.to_bytes(4, byteorder="little", signed=False)
+        data_len: int = 0
+        logout_request: bytes = (GameClient.Action.LOGOUT.value.to_bytes(4, byteorder="little", signed=False)
+                                 + data_len.to_bytes(4, byteorder="little", signed=False))
+        try:
+            self.__client_socket.sendall(logout_request)
+
+            # Receiving result code as bytes
+            result_code: bytes = self.__client_socket.recv(4)
+            # Converting bytes into Enum
+            result_enum: GameClient.Result = GameClient.Result(
+                int.from_bytes(result_code, byteorder="little", signed=False)
+            )
+            print("Logout result:", result_enum.name)
+        except socket.error as e:
+            print(f"Socket error: {e}")
+        finally:
+            self.__client_socket.close()
 
 
 def main():
     game_client: GameClient = GameClient.login("Boris")
+    game_client.logout()
 
 
 if __name__ == "__main__":
