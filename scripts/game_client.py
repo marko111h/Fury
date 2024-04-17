@@ -139,7 +139,7 @@ class GameClient:
         TIMEOUT = 4
         INTERNAL_SERVER_ERROR = 500
 
-    class Action(Enum):
+    class ActionType(Enum):
         LOGIN = 1
         LOGOUT = 2
         MAP = 3
@@ -149,6 +149,12 @@ class GameClient:
         CHAT = 100
         MOVE = 101
         SHOOT = 102
+
+    class Action:
+        def __init__(self, action_type: 'GameClient.ActionType', player: Player, data: str):
+            self.type: 'GameClient.ActionType' = action_type
+            self.player: Player = player
+            self.data: str = data
 
     def __init__(self, player: Player, client_socket: socket):
         self.__client_socket: socket = client_socket
@@ -168,7 +174,7 @@ class GameClient:
         self.update_map()
 
     @staticmethod
-    def __send_request__(client_socket: socket, action: 'GameClient.Action' , json_data: str = "") -> None:
+    def __send_request__(client_socket: socket, action: 'GameClient.ActionType', json_data: str = "") -> None:
         request: bytes = (action.value.to_bytes(4, byteorder="little")
                           + len(json_data).to_bytes(4, byteorder="little"))
         if json_data != "":
@@ -196,8 +202,11 @@ class GameClient:
         json_data: Dict = json.loads(json_bytes.decode('utf-8'))
         return result_enum, json_data
 
-    def __update__(self):
-        pass
+    def __find_player__(self, idx: int) -> Optional[Player]:
+        for player in self.__players:
+            if player.player_id == idx:
+                return player
+        return None
 
     @classmethod
     def login(cls, name: str, password: Optional[str] = None,
@@ -230,7 +239,7 @@ class GameClient:
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.connect(GameClient.server_address)
             # sends login request to the server
-            GameClient.__send_request__(client_socket, GameClient.Action.LOGIN, json_params)
+            GameClient.__send_request__(client_socket, GameClient.ActionType.LOGIN, json_params)
             # gets response from the server
             result_enum, json_data = GameClient.__process_response__(client_socket)
 
@@ -254,7 +263,7 @@ class GameClient:
         """ Logouts the player from the game and closes the socket
         """
         try:
-            GameClient.__send_request__(self.__client_socket, GameClient.Action.LOGOUT)
+            GameClient.__send_request__(self.__client_socket, GameClient.ActionType.LOGOUT)
             result_enum, _ = GameClient.__process_response__(self.__client_socket)
             print("Logout result:", result_enum.name)
         except socket.error as e:
@@ -266,7 +275,7 @@ class GameClient:
         """ Updates the state of the game by requesting GAME_STATE
         """
         try:
-            GameClient.__send_request__(self.__client_socket, GameClient.Action.GAME_STATE)
+            GameClient.__send_request__(self.__client_socket, GameClient.ActionType.GAME_STATE)
             result_enum, json_game_state = GameClient.__process_response__(self.__client_socket)
             print("Game State request result:", result_enum.name)
 
@@ -282,12 +291,10 @@ class GameClient:
                 vehicles = json_game_state["vehicles"]
                 # key: vehicle id, value: vehicle features as dictionary
                 for key, value in vehicles.items():
-                    owner: Player = Player(-1, "Nobody")
-                    # search for owner by id
-                    for player in self.__players:
-                        if player.player_id == value["player_id"]:
-                            owner = player
-                        break
+                    owner: Player = self.__find_player__(value["player_id"])
+                    if not owner:
+                        print("No player found error!")
+                        return
                     cur_pos: Tuple[int, int] = (value["position"]["x"], value["position"]["y"])
                     spawn_pos: Tuple[int, int] = (value["spawn_position"]["x"], value["spawn_position"]["y"])
                     vehicle = Tank(key, cur_pos, spawn_pos,
@@ -303,7 +310,7 @@ class GameClient:
         """ Updates the map by requesting MAP
         """
         try:
-            GameClient.__send_request__(self.__client_socket, GameClient.Action.MAP)
+            GameClient.__send_request__(self.__client_socket, GameClient.ActionType.MAP)
             result_enum, json_data = GameClient.__process_response__(self.__client_socket)
             if result_enum == GameClient.Result.OKEY:
                 self.__grid: Grid = Grid(json_data["size"])
@@ -320,9 +327,43 @@ class GameClient:
         except socket.error as e:
             print(f"Socket error: {e}")
 
+    def get_game_actions(self) -> List['GameClient.Action']:
+        """ Requests game actions from the server and returns them
+        @:return returns list of actions got from server
+        """
+        GameClient.__send_request__(self.__client_socket, GameClient.ActionType.GAME_ACTIONS)
+        result_enum, json_data = GameClient.__process_response__(self.__client_socket)
+        actions: List['GameClient.Action'] = []
+        if result_enum == GameClient.Result.OKEY:
+            for action in json_data["actions"]:
+                player: Player = self.__find_player__(action["player_id"])
+                action_type: GameClient.ActionType = GameClient.ActionType(action["action_type"])
+                action_data: str = action["data"]
+                action.append(GameClient.Action(action_type, player, action_data))
+        return actions
+
+    def __execute_action__(self, action: 'GameClient.Action'):
+        if action.type == GameClient.ActionType.MOVE:
+            # self.__play_move()
+            pass
+        elif action.type == GameClient.ActionType.SHOOT:
+            # self.__shoot()
+            pass
+        elif action.type == GameClient.ActionType.CHAT:
+            # self.__chat()
+            pass
+        else:
+            # Not a game action
+            raise ValueError
+
 
 def main():
     game_client: GameClient = GameClient.login("Boris")
+    actions = game_client.process_game_actions()
+    print(len(actions))
+    for action in actions:
+        print(action.type.name)
+
     game_client.logout()
 
 
