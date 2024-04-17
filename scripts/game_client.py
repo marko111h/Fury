@@ -4,6 +4,7 @@ import json
 import socket
 from enum import Enum
 
+
 # To run the code
 class Tank:
     def __init__(self, id, curr_position, spawn_position, capture_points, speed_points, hit_points, fire_power,
@@ -100,7 +101,7 @@ class Player:
         """Adds a vehicle to the player's ownership."""
         self.vehicles.append(vehicle)
 
-    def remove_vehicle(self,vehicle):
+    def remove_vehicle(self, vehicle):
         """Removes the vehicle from player ownership."""
         self.vehicles.remove(vehicle)
 
@@ -150,17 +151,21 @@ class GameClient:
         MOVE = 101
         SHOOT = 102
 
+    # TODO: Make it to support CHAT
     class Action:
-        def __init__(self, action_type: 'GameClient.ActionType', player: Player, data: str):
+        def __init__(self, action_type: 'GameClient.ActionType', player: Player, vehicle: Tank,
+                     target: Tuple[int, int]):
             self.type: 'GameClient.ActionType' = action_type
             self.player: Player = player
-            self.data: str = data
+            self.vehicle: Tank = vehicle
+            self.target: Tuple[int, int] = target
 
-    def __init__(self, player: Player, client_socket: socket):
+    def __init__(self, client_player: Player, client_socket: socket):
         self.__client_socket: socket = client_socket
         self.__grid: Grid = Grid(0)
-        self.__players: List[Player] = [player]  # stored in order of playing turns
+        self.__players: List[Player] = []
         self.__players_capturing_base: List[Player] = []
+        self.__client_player: Player = client_player
         self.__base: List[Tuple[int, int]] = [(0, 0)]
         self.__name: Optional[str] = None
         self.__rounds: int = 15
@@ -287,6 +292,8 @@ class GameClient:
                 self.__players.clear()
                 for player in json_game_state["players"]:
                     self.__players.append(Player(player["idx"], player["name"]))
+                    if self.__players[-1].player_id == self.__client_player.player_id:
+                        self.__client_player = self.__players[-1]
                     print(player["idx"], player["name"])
                 vehicles = json_game_state["vehicles"]
                 # key: vehicle id, value: vehicle features as dictionary
@@ -342,28 +349,91 @@ class GameClient:
                 action.append(GameClient.Action(action_type, player, action_data))
         return actions
 
+    def play_turn(self, action: 'GameClient.Action'):
+        assert (action.player == self.__client_player)
+        # I don't know if we have to do that in client logic
+        # self.__execute_action__(action)
+        # send the action to the server
+        action_data_dict: Dict[str, Any] = {
+            "vehicle_id": action.vehicle.id,
+            "target": {
+                "x": action.target[0],
+                "y": action.target[1],
+                "z": Grid.get_z(action.target[0], action.target[1])
+            }
+        }
+        action_data_json: str = json.dumps(action_data_dict, separators=(',', ':'))
+        GameClient.__send_request__(self.__client_socket, action.type, action_data_json)
+        result_enum, _ = GameClient.__process_response__(self.__client_socket)
+        print("Move result", result_enum.name)
+        if result_enum == GameClient.Result.OKEY:
+            GameClient.__send_request__(self.__client_socket, GameClient.ActionType.TURN)
+            result_enum, _ = GameClient.__process_response__(self.__client_socket)
+            print("End of turn send", result_enum.name)
+        else:
+            print("Something went wrong, turn wasn't played")
+
     def __execute_action__(self, action: 'GameClient.Action'):
         if action.type == GameClient.ActionType.MOVE:
-            # self.__play_move()
-            pass
+            self.__execute_move__(action)
         elif action.type == GameClient.ActionType.SHOOT:
-            # self.__shoot()
-            pass
+            self.__execute_shoot__(action)
+        # TODO: chat action
         elif action.type == GameClient.ActionType.CHAT:
-            # self.__chat()
             pass
         else:
             # Not a game action
             raise ValueError
 
+    # TODO: mb add inheritance and execute() overridden method
+    def __execute_move__(self, action: 'GameClient.Action'):
+        assert (action.type == GameClient.ActionType.MOVE)
+        action.vehicle.move(action.target)
+
+    def __execute_shoot__(self, action: 'GameClient.Action'):
+        assert (action.type == GameClient.ActionType.SHOOT)
+        # TODO: replace with get_vehicle(vehicle_id: int)
+        vehicles: List[Tank] = action.player.vehicles
+        vehicle: Optional[Tank] = None
+        for cur_vehicle in vehicles:
+            if cur_vehicle.id == action.vehicle.id:
+                vehicle = cur_vehicle
+        if not vehicle:
+            raise ValueError
+        # TODO: make method shoot take coordinates of the cell
+        target: Optional[Tank] = None
+        for player in self.__players:
+            if player == action.player:
+                continue
+            for vehicle in player.vehicles:
+                if vehicle.curr_position == action.target:
+                    target = vehicle
+        if not target:
+            raise ValueError
+        vehicle.shoot(target)
+
+    def __execute_chat__(self, action: Action):
+        assert (action.type == GameClient.ActionType.CHAT)
+        pass
+
+    # just simple function to send moves to the server
+    # def print_pos(self) -> Action:
+    #     vehicle: Tank = self.__client_player.vehicles[0]
+    #     print(vehicle.id)
+    #     print(vehicle.curr_position)
+    #     x = int(input())
+    #     y = int(input())
+    #     return GameClient.Action(GameClient.ActionType.MOVE,
+    #                              self.__client_player,
+    #                              vehicle,
+    #                              (x, y))
+
 
 def main():
     game_client: GameClient = GameClient.login("Boris")
-    actions = game_client.process_game_actions()
-    print(len(actions))
-    for action in actions:
-        print(action.type.name)
-
+    actions = game_client.get_game_actions()
+    # for i in range(3):
+    #     game_client.play_turn(game_client.print_pos())
     game_client.logout()
 
 
