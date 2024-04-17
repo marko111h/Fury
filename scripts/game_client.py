@@ -392,14 +392,6 @@ class GameClient:
 
     def __execute_shoot__(self, action: 'GameClient.Action'):
         assert (action.type == GameClient.ActionType.SHOOT)
-        # TODO: replace with get_vehicle(vehicle_id: int)
-        vehicles: List[Tank] = action.player.vehicles
-        vehicle: Optional[Tank] = None
-        for cur_vehicle in vehicles:
-            if cur_vehicle.id == action.vehicle.id:
-                vehicle = cur_vehicle
-        if not vehicle:
-            raise ValueError
         # TODO: make method shoot take coordinates of the cell
         target: Optional[Tank] = None
         for player in self.__players:
@@ -410,30 +402,30 @@ class GameClient:
                     target = vehicle
         if not target:
             raise ValueError
-        vehicle.shoot(target)
+        action.vehicle.shoot(target)
 
     def __execute_chat__(self, action: Action):
         assert (action.type == GameClient.ActionType.CHAT)
         pass
 
     # just simple function to send moves to the server
-    # def print_pos(self) -> Action:
-    #     vehicle: Tank = self.__client_player.vehicles[0]
-    #     print(vehicle.id)
-    #     print(vehicle.curr_position)
-    #     x = int(input())
-    #     y = int(input())
-    #     return GameClient.Action(GameClient.ActionType.MOVE,
-    #                              self.__client_player,
-    #                              vehicle,
-    #                              (x, y))
+    def print_pos(self) -> Action:
+        vehicle: Tank = self.__client_player.vehicles[0]
+        print(vehicle.id)
+        print(vehicle.curr_position)
+        x = int(input())
+        y = int(input())
+        return GameClient.Action(GameClient.ActionType.MOVE,
+                                 self.__client_player,
+                                 vehicle,
+                                 (x, y))
 
 
 def main():
     game_client: GameClient = GameClient.login("Boris")
     actions = game_client.get_game_actions()
-    # for i in range(3):
-    #     game_client.play_turn(game_client.print_pos())
+    for i in range(3):
+        game_client.play_turn(game_client.print_pos())
     game_client.logout()
 
 
