@@ -64,9 +64,15 @@ class RealPlayer(Player):
             print(f"Player ID: {player_id}")
             print(f"attacks contents: {attacks}")
             if player_id != self.id:
-                for attack in attacks:
+                if isinstance(attacks, list):
+                    for attack in attacks:
                         print(f"Processing attack: {attack}")
+
+                        # Umesto dodavanja celog attack objekta u set, koristite odgovarajuću vrednost kao ključeve
+                        # Na primer, možete dodati player_id, koji je nepromenljiv tip podataka
                         attacked_opponents.add(player_id)
+                else:
+                    print(f"Unexpected type in attacks: {type(attacks)}")
 
         # Check which opponents the real player attacked in the previous round
         current_player_attacks = opponent_attacks.get(self.id, [])

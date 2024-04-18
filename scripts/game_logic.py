@@ -304,7 +304,7 @@ class GameLogic:
         print("Current attacks:", current_attacks)
 
         # Save current attacks as previous attacks
-        self.previous_attacks.append(current_attacks[player_id])
+        self.previous_attacks.update(current_attacks)
 
         # Log the updated previous_attacks for debugging purposes
         print("Updated previous_attacks:", self.previous_attacks)
