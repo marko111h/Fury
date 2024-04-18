@@ -1,4 +1,4 @@
-from game_client import GameClient
+# from scripts.game_client import GameClient
 
 
 class Tank:
@@ -59,15 +59,15 @@ class Tank:
     def shoot(self, target):
         target.take_damage(self)
 
-    def move(self, new_position, game_client: GameClient):
+    def move(self, new_position):
         self.curr_position = new_position
 
-        if new_position not in game_client.get_base():
-            self.capture_points = 0
+        # if new_position not in game_client.get_base():
+        #     self.capture_points = 0
 
-    def earn_capture_point(self, game_client: GameClient):
-        if self.curr_position in game_client.get_base():
-            self.capture_points += 1
+    # def earn_capture_point(self, game_client: GameClient):
+    #     if self.curr_position in game_client.get_base():
+    #         self.capture_points += 1
 
     def take_damage(self, shooter):
         self.hit_points -= 1

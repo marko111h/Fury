@@ -4,126 +4,11 @@ import json
 import socket
 from enum import Enum
 
-
-# To run the code
-class Tank:
-    def __init__(self, id, curr_position, spawn_position, capture_points, speed_points, hit_points, fire_power,
-                 destruction_points, owner):
-        self.id = id
-        self.curr_position = curr_position
-        self.spawn_position = spawn_position
-        self.capture_points = capture_points
-        self.speed_points = speed_points
-        self.starting_hit_points = hit_points  # added this beacuse we will need it in respawning
-        self.hit_points = hit_points
-        self.fire_power = fire_power
-        self.destruction_points = destruction_points
-        self.owner = owner
-        self.prev_attacker = None
-        self.order_position = None
-
-    def get_id(self):
-        return self.id
-
-    def get_curr_position(self):
-        return self.curr_position
-
-    def get_spawn_position(self):
-        return self.spawn_position
-
-    def get_capture_points(self):
-        return self.capture_points
-
-    def get_speed_points(self):
-        return self.speed_points
-
-    def get_starting_hit_points(self):
-        return self.starting_hit_points
-
-    def get_hit_points(self):
-        return self.hit_points
-
-    def get_fire_power(self):
-        return self.fire_power
-
-    def get_destruction_points(self):
-        return self.destruction_points
-
-    def get_owner(self):
-        return self.owner
-
-    def get_prev_attacker(self):
-        return self.prev_attacker
-
-    def get_order_position(self):
-        return self.order_position
-
-    def add_destruction_points(self, value):
-        self.destruction_points += value
-
-    def shoot(self, target):
-        target.take_damage(self)
-
-    def move(self, new_position):
-        self.curr_position = new_position
-
-        if new_position not in []:
-            self.capture_points = 0
-
-    def earn_capture_point(self):
-        if self.curr_position in []:
-            self.capture_points += 1
-
-    def take_damage(self, shooter):
-        self.hit_points -= 1
-
-        if self.hit_points == 0:
-            self.capture_points = 0
-            self.curr_position = self.spawn_position
-            self.hit_points = self.starting_hit_points
-            shooter.add_destruction_points(self.hit_points)
-
-
-class Player:
-    def __init__(self, player_id, name):
-        # Basic player attributes
-        self.player_id = player_id
-        self.name = name
-
-        # Points for destroying vehicles and capturing bases
-        self.destruction_points = 0
-        self.base_capture_points = 0
-
-        # Players vehicles
-        self.vehicles = []
-
-    def add_vehicle(self, vehicle):
-        """Adds a vehicle to the player's ownership."""
-        self.vehicles.append(vehicle)
-
-    def remove_vehicle(self, vehicle):
-        """Removes the vehicle from player ownership."""
-        self.vehicles.remove(vehicle)
-
-    def earn_destruction_points(self, points):
-        """Increases destruction points."""
-        self.destruction_points += points
-
-    def lose_destruction_points(self, points):
-        """Reduces destruction points."""
-        self.destruction_points -= points
-
-    def earn_base_capture_points(self, points):
-        """Increases points for capturing the base."""
-        self.base_capture_points += points
-
-    def lose_base_capture_points(self, points):
-        """Reduces points for capturing a base."""
-        self.base_capture_points -= points
-
-    def __str__(self):
-        """Returns player information as a string."""
-        return f"Player: {self.name}, ID: {self.player_id}, Destruction Points: {self.destruction_points}, Base Capture Points: {self.base_capture_points}"
+from scripts.player import Player
+from scripts.real_player import RealPlayer
+from scripts.tank import Tank
+from scripts.medium_tank import MediumTank
+from bot import Bot
 
 
 class GameClient:
@@ -162,10 +47,16 @@ class GameClient:
 
     def __init__(self, client_player: Player, client_socket: socket):
         self.__client_socket: socket = client_socket
+        self.__client_player: Player = client_player
         self.__grid: Grid = Grid(0)
         self.__players: List[Player] = []
+        self.observers: List[Player] = []
+        if not self.__client_player.is_observer:
+            self.__players.append(self.__client_player)
+        else:
+            self.observers.append(self.__client_player)
+
         self.__players_capturing_base: List[Player] = []
-        self.__client_player: Player = client_player
         self.__base: List[Tuple[int, int]] = [(0, 0)]
         self.__name: Optional[str] = None
         self.__rounds: int = 15
@@ -209,16 +100,17 @@ class GameClient:
 
     def __find_player__(self, idx: int) -> Optional[Player]:
         for player in self.__players:
-            if player.player_id == idx:
+            if player.id == idx:
                 return player
         return None
 
     @classmethod
-    def login(cls, name: str, password: Optional[str] = None,
+    def login(cls, client_socket: socket, name: str, password: Optional[str] = None,
               game: Optional[str] = None, num_turns: Optional[int] = None,
               num_players: Optional[int] = None, is_observer: Optional[bool] = None,
               is_full: Optional[bool] = None) -> Optional['GameClient']:
         """ Sends login request to the server
+        :param client_socket socket to communicate with server
         :param name: name of the player
         :param password: user's password, default: no password
         :param game: game's name, default: no name
@@ -233,6 +125,7 @@ class GameClient:
         params = locals().copy()
         # because it is classmethod we need to remove first parameter
         params.pop("cls")
+        params.pop("client_socket")
         # removes every None from calls like: login("Boris", password = None)
         filtered_params = {key: value for key, value in params.items()
                            if value is not None}
@@ -254,14 +147,13 @@ class GameClient:
                 return None
             player_id: int = json_data["idx"]
             player_name: str = json_data["name"]
+            is_observer: bool = json_data["is_observer"]
             print("Logged in player")
             print("Name:", player_name, ", id:", player_id)
             # TODO: create game with provided through args settings
-            return GameClient(Player(player_id, player_name), client_socket)
+            return GameClient(RealPlayer(player_id, player_name, is_observer), client_socket)
         except socket.error as e:
             print(f"Socket error: {e}")
-            if client_socket:
-                client_socket.close()
             return None
 
     def logout(self) -> None:
@@ -273,8 +165,6 @@ class GameClient:
             print("Logout result:", result_enum.name)
         except socket.error as e:
             print(f"Socket error: {e}")
-        finally:
-            self.__client_socket.close()
 
     def update_game_state(self) -> None:
         """ Updates the state of the game by requesting GAME_STATE
@@ -289,25 +179,26 @@ class GameClient:
                 self.__rounds = json_game_state["num_rounds"]
                 self.__cur_turn = json_game_state["current_turn"]
                 self.__cur_round = json_game_state["current_round"]
-                self.__players.clear()
+
                 for player in json_game_state["players"]:
-                    self.__players.append(Player(player["idx"], player["name"]))
-                    if self.__players[-1].player_id == self.__client_player.player_id:
-                        self.__client_player = self.__players[-1]
-                    print(player["idx"], player["name"])
+                    if self.__client_player.id != player["idx"]:
+                        self.__players.append(RealPlayer(player["idx"], player["name"], player["is_observer"]))
+                        print(player["idx"], player["name"])
                 vehicles = json_game_state["vehicles"]
                 # key: vehicle id, value: vehicle features as dictionary
-                for key, value in vehicles.items():
-                    owner: Player = self.__find_player__(value["player_id"])
+                for vehicle_id, vehicle_features in vehicles.items():
+                    owner: Player = self.__find_player__(vehicle_features["player_id"])
                     if not owner:
                         print("No player found error!")
                         return
-                    cur_pos: Tuple[int, int] = (value["position"]["x"], value["position"]["y"])
-                    spawn_pos: Tuple[int, int] = (value["spawn_position"]["x"], value["spawn_position"]["y"])
-                    vehicle = Tank(key, cur_pos, spawn_pos,
-                                   value["capture_points"], 2, 2, 1,
-                                   2, owner)
-                    owner.add_vehicle(vehicle)
+                    cur_pos: Tuple[int, int] = (vehicle_features["position"]["x"], vehicle_features["position"]["y"])
+                    spawn_pos: Tuple[int, int] = (vehicle_features["spawn_position"]["x"],
+                                                  vehicle_features["spawn_position"]["y"])
+                    vehicle_type: str = vehicle_features["vehicle_type"]
+                    if vehicle_type == "medium_tank":
+                        vehicle: Tank = MediumTank(vehicle_id, cur_pos, spawn_pos, vehicle_features["capture_points"],
+                                                   owner, None, 1)
+                        owner.add_tank(vehicle)
                 # TODO: order players correctly, finished, attack matrix, winner, win_points
                 # TODO: player_result_points, catapult_usage
         except socket.error as e:
@@ -343,7 +234,7 @@ class GameClient:
         actions: List['GameClient.Action'] = []
         if result_enum == GameClient.Result.OKEY:
             for action in json_data["actions"]:
-                player: Player = self.__find_player__(action["player_id"])
+                player: Optional[RealPlayer] = self.__find_player__(action["player_id"])
                 action_type: GameClient.ActionType = GameClient.ActionType(action["action_type"])
                 action_data: str = action["data"]
                 action.append(GameClient.Action(action_type, player, action_data))
@@ -397,7 +288,7 @@ class GameClient:
         for player in self.__players:
             if player == action.player:
                 continue
-            for vehicle in player.vehicles:
+            for vehicle in player.tanks:
                 if vehicle.curr_position == action.target:
                     target = vehicle
         if not target:
@@ -410,7 +301,7 @@ class GameClient:
 
     # just simple function to send moves to the server
     def print_pos(self) -> Action:
-        vehicle: Tank = self.__client_player.vehicles[0]
+        vehicle: Tank = self.__client_player.tanks[0]
         print(vehicle.id)
         print(vehicle.curr_position)
         x = int(input())
@@ -423,12 +314,23 @@ class GameClient:
     def get_base(self) -> List[Tuple[int, int]]:
         return self.__base
 
+
 def main():
-    game_client: GameClient = GameClient.login("Boris")
+    # def address and port server
+    server_address = ("wgforge-srv.wargaming.net", 443)
+
+    # create sock connection
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    # connect on server
+    sock.connect(server_address)
+
+    game_client: GameClient = GameClient.login(sock, "Boris")
     actions = game_client.get_game_actions()
     for i in range(3):
         game_client.play_turn(game_client.print_pos())
     game_client.logout()
+    sock.close()
 
 
 if __name__ == "__main__":

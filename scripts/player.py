@@ -11,11 +11,12 @@ from connection_to_server.server_communication import (
     move_request,
     shoot_request
 )
+from tank import Tank
 # from game_logic import GameLogic
 
 
 class Player(ABC):
-    def __init__(self,id, name, is_observer):
+    def __init__(self, id, name, is_observer):
         # Basic player attributes
         self.id = id
         self.name = name
@@ -33,7 +34,7 @@ class Player(ABC):
         self.vehicles_in_base = {} # Dictionary that tracks vehicles in the base
 
     @abstractmethod
-    def add_tanks(self, tank_data):
+    def add_tank(self, tank: Tank):
         pass
 
 

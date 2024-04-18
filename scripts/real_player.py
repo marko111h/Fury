@@ -11,21 +11,24 @@ from connection_to_server.server_communication import (
     move_request,
     shoot_request
 )
+from tank import Tank
+from typing import List
+
 
 class RealPlayer(Player):
-    def __init__(self,idx,name,is_observer=False):
+    def __init__(self, idx, name, is_observer=False):
         super().__init__(idx, name, is_observer)
-        self.tanks = []  # list of tank with player manage
-        self.last_tank_played = []  #List of last played tanks
+        self.tanks: List[Tank] = []  # list of tank with player manage
+        self.last_tank_played: List[Tank] = []  #List of last played tanks
         self.vehicles_in_base = {}  # Dictionary that tracks vehicles in the base
 
-    def play_turn(self, game_logic,sock):
+    def play_turn(self, game_logic, sock):
         """Defines how a real player plays their turn."""
         for tank_id in self.tanks:
             tank_data = game_logic.game_state['vehicles'][tank_id]
 
-            if self.should_attack_enemy(game_logic,tank_data):
-                self.attack_enemy(tank_data,game_logic,sock)
+            if self.should_attack_enemy(game_logic, tank_data):
+                self.attack_enemy(tank_data, game_logic, sock)
             # move to base
             elif self.should_move_towards_base(game_logic, tank_data):
                 self.move_towards_base(tank_data, game_logic, sock)
@@ -39,21 +42,16 @@ class RealPlayer(Player):
         actions = game_actions_request(sock)
 
         #Process the game actions
-        game_logic.process_game_actions(actions,game_logic)
+        game_logic.process_game_actions(actions, game_logic)
         # Send a turn request
         self.send_turn_request(sock)
 
+    def add_tank(self, tank: Tank):
+        # Implementation of adding tank
+        if tank not in self.tanks:
+            self.tanks.append(tank)
 
-    def add_tanks(self, tank_data):
-        # Implementation of adding tanks
-
-        self.tanks.extend(tank_data)
-        print(f"Tank_data: {tank_data} ")
-        print(f"Successfully added {self.tanks} tanks .")
-        # that should be added cordiante spawn_positon, posiotion for tha from  Class Tank
-
-    def should_attack_enemy(self, game_logic,tank_data):
-
+    def should_attack_enemy(self, game_logic, tank_data):
         #Check your opponent's previous attacks first
         opponent_attacks = game_logic.previous_attacks
         print(f"we check previous attacks {opponent_attacks}")
@@ -82,41 +80,35 @@ class RealPlayer(Player):
 
         for opponent in attacked_opponents:
             if opponent in current_player_attacks:
-                return True ## The opponent attacked the player in the previous move
+                return True  ## The opponent attacked the player in the previous move
 
         # Neutrality Rule 2: An opponent who did not attack a player in the previous move may not be attacked
         # or was attacked by a third player in the previous move
 
         for opponent in current_player_attacks:
             if opponent not in attacked_opponents:
-                return False ## The opponent did not attack the player in the previous move or was attacked by a third player
+                return False  ## The opponent did not attack the player in the previous move or was attacked by a third player
 
-        return False ## Not eligible for attack
-
-
-
-
-
+        return False  ## Not eligible for attack
 
     def should_move_towards_base(self, game_logic, tank_data):
         pass
 
-
     def attack_enemy(self, tank_data, game_logic, sock):
-         pass
-         # Implementation of attacks on the opponent
-         target_tank_id = self.choose_enemy_to_attack(game_logic)
+        pass
+        # Implementation of attacks on the opponent
+        target_tank_id = self.choose_enemy_to_attack(game_logic)
 
-         if target_tank_id:
-             # Send a shooting request
-             shoot_request(sock, tank_data['id'], target_tank_id)
+        if target_tank_id:
+            # Send a shooting request
+            shoot_request(sock, tank_data['id'], target_tank_id)
 
-             #  Update the game state
-             game_logic.update_game_state(sock)
+            #  Update the game state
+            game_logic.update_game_state(sock)
 
-             # Check if the targeted tank is destroyed
-             if game_logic.game_state['vehicles'][target_tank_id]['hp'] == 0:
-                 self.earn_destruction_points(1)
+            # Check if the targeted tank is destroyed
+            if game_logic.game_state['vehicles'][target_tank_id]['hp'] == 0:
+                self.earn_destruction_points(1)
 
     def should_move_towards_base(self, game_logic, tank_data):
         # Logika koja određuje kada se tenk treba kretati prema bazi
@@ -134,6 +126,7 @@ class RealPlayer(Player):
         # if distance_to_base < 10 and tank_data['health'] < 50:
         #     return True
         # return False
+
     def move_towards_base(self, tank_data, game_logic, sock):
         pass
         # # Implementacija kretanja ka bazi
@@ -168,4 +161,3 @@ class RealPlayer(Player):
     def send_turn_request(self, sock):
         """Send a move request to the server."""
         turn_request(sock)
-

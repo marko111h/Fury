@@ -17,7 +17,7 @@ class GameClient:  # Temp class
 
 
 class Bot(Player):
-    def __init__(self, id, name, grid: Grid, game: GameClient):
+    def __init__(self, id, name, game: GameClient):
         super().__init__(id, name)
         self.__client = game
         self.__paths: List[List[Tuple[int, int]]] = [None] * len(self.vehicles)
