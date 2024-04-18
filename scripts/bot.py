@@ -1,21 +1,7 @@
 from scripts.grid import Grid
 from scripts.player import Player
 from typing import List, Tuple
-
-
-class Tank:  # Temp class
-    def __init__(self):
-        self.curr_position = 0, 0
-        self.speed_points = 2
-
-    def get_curr_position(self):
-        return self.curr_position
-
-    def move(self, q: int, r: int):
-        pass
-
-    def get_speed_points(self):
-        return self.speed_points
+from scripts.tank import Tank
 
 
 class GameClient:  # Temp class

@@ -420,6 +420,8 @@ class GameClient:
                                  vehicle,
                                  (x, y))
 
+    def get_base(self) -> List[Tuple[int, int]]:
+        return self.__base
 
 def main():
     game_client: GameClient = GameClient.login("Boris")
