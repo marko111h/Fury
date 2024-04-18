@@ -1,30 +1,7 @@
 import socket
 import json
 
-def login_multiple_players(names,server_address):
-    players_info = {}
-    for name in names:
-        # Create a new socket for each player
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect(server_address)
-
-        # login player
-        response_data = login_request(name,sock)
-
-        if response_data:
-            print(f"Succesful login for player {name}")
-            players_info[name] = {
-                "socket": sock,
-                "response_data": response_data
-            }
-        else:
-            print(f"Login failed for player {name}")
-            sock.close()
-    return players_info
 def login_request(name,sock):
-    # server_address = ("wgforge-srv.wargaming.net", 443)
-    # sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # sock.connect(server_address)
 
     # Create login request
     login_request = b'\x01\x00\x00\x00\x10\x00\x00\x00{"name":"%s"}' % name.encode('utf-8')
@@ -53,10 +30,10 @@ def logout_request(sock):
     sock.sendall(logout_request)
 
 
-    # accept answer
+    #Accept response
     response = sock.recv(4096)
 
-    # decoding result
+    # Decoding the result code
     result_code = int.from_bytes(response[:4], 'little')
 
     if result_code != 0:
@@ -71,10 +48,10 @@ def map_request(sock):
     map_request = b'\x03\x00\x00\x00\x00\x00\x00\x00'  # {action (3)} + {data length (0)}
     sock.sendall(map_request)
 
-    # Accept response
+    #Accept response
     response = sock.recv(4096)
 
-    # decoding result code
+    # Decoding the result code
     result_code = int.from_bytes(response[:4],'little')
 
     # if result okey, parsing map
@@ -102,6 +79,7 @@ def game_state_request(sock):
         json_data = response[8:8 + data_length].decode('utf-8')
         game_state = json.loads(json_data)
         print("Game state:", game_state)
+        return game_state
     else:
         error_length = int.from_bytes(response[4:8],'little')
         error_message = response[8:8 + error_length].decode('utf-8')
@@ -111,19 +89,20 @@ def game_actions_request(sock):
     game_actions_request = b'\x05\x00\x00\x00\x00\x00\x00\x00'  # {action (5)} + {data length (0)}
     sock.sendall(game_actions_request)
 
-    # Primanje odgovora
+    # Receiving a response
     response = sock.recv(4096)
 
-    # Dekodiranje result code-a
+    # Decoding the result code
 
     result_code = int.from_bytes(response[:4], 'little')
 
-    # Ako je rezultat OKEY, parsiranje liste radnji
+    # If the result is OKEY, parsing the list of actions
     if result_code == 0:
         data_length = int.from_bytes(response[4:8], 'little')
         json_data = response[8:8 + data_length].decode('utf-8')
         game_actions = json.loads(json_data)
         print("Game actions:", game_actions)
+        return game_actions
     else:
         error_length = int.from_bytes(response[4:8], 'little')
         error_message = response[8:8 + error_length].decode('utf-8')
@@ -132,13 +111,13 @@ def turn_request(sock):
     turn_request = b'\x06\x00\x00\x00\x00\x00\x00\x00'  # {action (6)} + {data length (0)}
     sock.sendall(turn_request)
 
-    # Primanje odgovora
+    # Receiving a response
     response = sock.recv(4096)
 
-    # Dekodiranje result code-a
+    # Decoding the result code
     result_code = int.from_bytes(response[:4], 'little')
 
-    # Ako je rezultat OKEY, potvrđivanje uspešnog poteza
+    # If the result is OKEY, confirming the successful move
     if result_code == 0:
         print("Turn successful.")
     else:
@@ -149,20 +128,20 @@ def chat_request(sock, message):
     message_json = json.dumps({"message": message}).encode('utf-8')
     data_length = len(message_json)
 
-    # Formiranje chat request-a
+    # Forming a chat request
     chat_request = (b'\x64\x00\x00\x00'  # action (100)
                     + data_length.to_bytes(4, 'little')
                     + message_json)
 
     sock.sendall(chat_request)
 
-    # Primanje odgovora
+    # Receiving a response
     response = sock.recv(4096)
 
-    # Dekodiranje result code-a
+    # Decoding the result code
     result_code = int.from_bytes(response[:4], 'little')
 
-    # Ako je rezultat OKEY, uspešna poruka
+    # If result is OKEY, success message
     if result_code == 0:
         print("Chat message sent.")
     else:
@@ -173,20 +152,20 @@ def move_request(sock,vehicle_id, target):
     move_json = json.dumps({"vehicle_id": vehicle_id, "target": target}).encode('utf-8')
     data_length = len(move_json)
 
-    # Formiranje move request-a
+    # Formation of move request
     move_request = (b'\x65\x00\x00\x00'  # action (101)
                     + data_length.to_bytes(4, 'little')
                     + move_json)
 
     sock.sendall(move_request)
 
-    # Primanje odgovora
+    # Receiving a response
     response = sock.recv(4096)
 
-    # Dekodiranje result code-a
+    # Decoding the result code
     result_code = int.from_bytes(response[:4], 'little')
 
-    # Ako je rezultat OKEY, uspešno kretanje
+    # If the result is OKEY, successful move
     if result_code == 0:
         print("Move successful.")
     else:
@@ -197,20 +176,20 @@ def shoot_request(sock, vehicle_id, target):
     shoot_json = json.dumps({"vehicle_id": vehicle_id, "target": target}).encode('utf-8')
     data_length = len(shoot_json)
 
-    # Formiranje shoot request-a
+    # Forming a shoot request
     shoot_request = (b'\x66\x00\x00\x00'  # action (102)
                      + data_length.to_bytes(4, 'little')
                      + shoot_json)
 
     sock.sendall(shoot_request)
 
-    # Primanje odgovora
+    # Receiving a response
     response = sock.recv(4096)
 
-    # Dekodiranje result code-a
+    # Decoding the result code
     result_code = int.from_bytes(response[:4], 'little')
 
-    # Ako je rezultat OKEY, uspešno pucanje
+    # If the result is OKEY, successful firing
     if result_code == 0:
         print("Shoot successful.")
     else:
