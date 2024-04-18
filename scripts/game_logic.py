@@ -10,26 +10,28 @@ from connection_to_server.server_communication import (
      move_request,
      shoot_request
  )
+from scripts.bot import Bot
 from scripts.bot_player import BotPlayer
+from scripts.grid import Grid
 from scripts.real_player import RealPlayer
 
 
 # from player import Player
 class GameLogic:
-    def __init__(self,real_player_data,base, max_rounds=15, ):
+    def __init__(self,real_player_data,base, max_rounds=15):
         # Real palyer
 
         self.real_player = RealPlayer(real_player_data['idx'], real_player_data['name'], real_player_data.get('is_observer', False))
         # Craete imaginare bot
-        self.bot1 = BotPlayer(idx=1, name="Bot1")
-        self.bot2 = BotPlayer(idx=2, name="Bot2")
+        self.bot1 = Bot(id=1, name="Bot1")
+        self.bot2 = Bot(id=2, name="Bot2")
         print(f"Real_player {self.real_player}")
         print(f"Bot 1 {self.bot1}")
         print(f"Bot2 {self.bot2}")
 
         self.players = [self.real_player, self.bot1, self.bot2]
 
-        # self.grid = grid
+        self.grid = Grid(5)
         self.base = base
         self.max_rounds = max_rounds
         self.rounds =0
@@ -308,6 +310,9 @@ class GameLogic:
 
         # Log the updated previous_attacks for debugging purposes
         print("Updated previous_attacks:", self.previous_attacks)
+
+    def get_grid(self):
+        return self.grid
 
     def get_max_destruction_points(self):
         """Maximal number of points for destroying opponets vehical... can change."""

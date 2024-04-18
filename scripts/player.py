@@ -11,7 +11,7 @@ from connection_to_server.server_communication import (
     move_request,
     shoot_request
 )
-from tank import Tank
+from scripts.tank import Tank
 # from game_logic import GameLogic
 
 

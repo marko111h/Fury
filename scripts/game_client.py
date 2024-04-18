@@ -1,4 +1,4 @@
-from grid import Grid
+from scripts.grid import Grid
 from typing import List, Tuple, Optional, Dict, Any
 import json
 import socket
@@ -8,7 +8,6 @@ from scripts.player import Player
 from scripts.real_player import RealPlayer
 from scripts.tank import Tank
 from scripts.medium_tank import MediumTank
-from bot import Bot
 
 
 class GameClient:
@@ -313,6 +312,9 @@ class GameClient:
 
     def get_base(self) -> List[Tuple[int, int]]:
         return self.__base
+
+    def get_grid(self):
+        return self.__grid
 
 
 def main():

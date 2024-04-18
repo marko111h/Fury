@@ -4,6 +4,7 @@ import json
 import socket
 import math
 from map_display.map_plot import plot_hexagonal_map
+from scripts.grid import Grid
 from scripts.map import draw_hex_grid
 from scripts.map import screen
 from scripts.player import Player
