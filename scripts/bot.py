@@ -1,32 +1,19 @@
+from scripts.game_client import GameClient
 from scripts.grid import Grid
-from scripts.player import Player
+from scripts.bot_player import BotPlayer
 from typing import List, Tuple
 from scripts.tank import Tank
 
+class Bot(BotPlayer):
+    def __init__(self, id, name):
+        super().__init__(id, name)
+        self.__paths: List[List[Tuple[int, int]]] = []
 
-class GameClient:  # Temp class
-    def __init__(self):
-        self.__base: List[Tuple[int, int]] = []
-        self.__grid: Grid = Grid(5)
-
-    def get_bases(self):
-        return self.__base
-
-    def get_grid(self):
-        return self.__grid
-
-
-class Bot(Player):
-    def __init__(self, id, name, is_observer: bool, game: GameClient):
-        super().__init__(id, name, is_observer)
-        self.__client = game
-        self.__paths: List[List[Tuple[int, int]]] = [None] * len(self.vehicles)
-
-    def find_path(self, tank: Tank) -> List[Tuple[int, int]]:
-        gridSize = self.__client.get_grid().get_size()
-        map = [float('inf')] * gridSize * (gridSize + 1)
+    def find_path(self, tank: Tank, client: GameClient) -> List[Tuple[int, int]]:
+        gridSize = client.get_grid().get_size()
+        map = [float('inf')] * (gridSize * (gridSize + 1))
         tankPos = tank.curr_position
-        map[self.__client.get_grid().index_function(tankPos[0], tankPos[1])] = 0
+        map[client.get_grid().index_function(tankPos[0], tankPos[1])] = 0
         basePos = None
 
         queue = [tankPos]
@@ -36,13 +23,12 @@ class Bot(Player):
                          Grid.get_point_south_west(currentPos, 1), Grid.get_point_south(currentPos, 1),
                          Grid.get_point_south_east(currentPos, 1), Grid.get_point_south_west(currentPos, -1)]
             for neighbor in neighbors:
-                if neighbor[0] <= gridSize and neighbor[1] <= gridSize and self.__client.get_grid().get(neighbor[0], neighbor[1]) is None:
-                    if float('inf') > map[self.__client.get_grid().index_function(neighbor[0], neighbor[1])] > 0:
+                if neighbor[0] <= gridSize and neighbor[1] <= gridSize and client.get_grid().get(neighbor[0], neighbor[1]) is None:
+                    if float('inf') > map[client.get_grid().index_function(neighbor[0], neighbor[1])] > 0:
                         queue.append(neighbor)
-                    if map[self.__client.get_grid().index_function(neighbor[0], neighbor[1])] + 1 > map[
-                        self.__client.get_grid().index_function(currentPos[0], currentPos[1])]:
-                        map[self.__client.get_grid().index_function(currentPos[0], currentPos[1])] = map[self.__client.get_grid().index_function(neighbor[0], neighbor[1])] + 1
-                    if neighbor in self.__client.get_bases():
+                    if map[client.get_grid().index_function(neighbor[0], neighbor[1])] + 1 < map[client.get_grid().index_function(currentPos[0], currentPos[1])]:
+                        map[client.get_grid().index_function(currentPos[0], currentPos[1])] = map[client.get_grid().index_function(neighbor[0], neighbor[1])] + 1
+                    if neighbor in client.get_base():
                         basePos = neighbor
                         queue.clear()
                         break
@@ -52,37 +38,41 @@ class Bot(Player):
 
         path = []
         itr = basePos
-        while map[self.__client.get_grid().index_function(itr[0], itr[1])] == 0:
+        while map[client.get_grid().index_function(itr[0], itr[1])] != 0:
             path.append(itr)
             neighbors = [Grid.get_point_south(itr, -1), Grid.get_point_south_east(itr, -1),
                          Grid.get_point_south_west(itr, 1), Grid.get_point_south(itr, 1),
                          Grid.get_point_south_east(itr, 1), Grid.get_point_south_west(itr, -1)]
             for neighbor in neighbors:
-                if map[self.__client.get_grid().index_function(neighbor[0], neighbor[1])] < map[
-                    self.__client.get_grid().index_function(itr[0], itr[1])]:
+                if map[client.get_grid().index_function(neighbor[0], neighbor[1])] < map[client.get_grid().index_function(itr[0], itr[1])]:
                     itr = neighbor
                     break
 
         return path
 
-    def is_clear(self, path: List[Tuple[int, int]]) -> bool:
+    def is_clear(self, path: List[Tuple[int, int]], client: GameClient) -> bool:
         for point in path:
-            if self.__client.get_grid().get(point[0], point[1]) is not None:
+            if client.get_grid().get(point[0], point[1]) is not None:
                 return False
         return True
 
-    def play_turn(self):
-        for i in range(len(self.vehicles)):
-            if self.__paths[i] is None or not self.is_clear(self.__paths[i]):
-                self.__paths[i] = self.find_path(self.vehicles[i])
+    def add_tank(self, tank: Tank):
+        if tank in self.tanks:
+            self.__paths.append(None)
+            self.tanks.remove(tank)
+
+    def play_turn(self, client, sock):
+        while len(self.__paths) < len(self.tanks):
+            self.__paths.append(None)
+
+        for i in range(len(self.tanks)):
+            if self.__paths[i] is None or not self.is_clear(self.__paths[i], client):
+                self.__paths[i] = self.find_path(self.tanks[i], client)
 
             if self.__paths[i] is not None:
-                dist = min(self.vehicles[i].get_speed_points(), len(self.__paths[i]))
-                self.vehicles[i].move(self.__paths[i][len(self.__paths[i]) - dist])
+                dist = min(self.tanks[i].get_speed_points(), len(self.__paths[i]))
+                if dist == 0:
+                    return
+                self.tanks[i].move(self.__paths[i][len(self.__paths[i]) - dist])
                 for j in range(dist):
                     self.__paths[i].pop()
-
-    def add_tank(self, tank: Tank):
-        # Implementation of adding tank
-        if tank not in self.tanks:
-            self.tanks.append(tank)

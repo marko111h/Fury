@@ -8,7 +8,6 @@ from scripts.player import Player
 from scripts.real_player import RealPlayer
 from scripts.tank import Tank
 from scripts.medium_tank import MediumTank
-from scripts.bot import Bot
 
 
 class GameClient:
@@ -39,11 +38,11 @@ class GameClient:
     # TODO: Make it to support CHAT
     class Action:
         def __init__(self, action_type: 'GameClient.ActionType', player: Player, vehicle: Tank,
-                     target: Tuple[int, int]):
+                     target: Tuple[int, int] = None):
             self.type: 'GameClient.ActionType' = action_type
             self.player: Player = player
             self.vehicle: Tank = vehicle
-            self.target: Tuple[int, int] = target
+            self.target: Optional[Tuple[int, int]] = target
 
     def __init__(self, client_player_id: int, client_socket: socket):
         self.__client_socket: socket = client_socket
@@ -83,10 +82,9 @@ class GameClient:
         result_enum: GameClient.Result = GameClient.Result(
             int.from_bytes(result_code, byteorder="little")
         )
-        print("Result of game_state", result_enum)
+        print("Result of request:", result_enum)
         # Read the length of JSON with data
         json_data_length: int = int.from_bytes(client_socket.recv(4), byteorder="little")
-        print("Length of json_data:", json_data_length)
         if result_enum != GameClient.Result.OKEY or json_data_length == 0:
             return result_enum, None
 
@@ -142,8 +140,6 @@ class GameClient:
             player_id: int = json_data["idx"]
             player_name: str = json_data["name"]
             is_observer: bool = json_data["is_observer"]
-            print("Logged in player")
-            print("Name:", player_name, ", id:", player_id)
             # TODO: create game with provided through args settings
             return GameClient(player_id, client_socket)
         except socket.error as e:
@@ -166,7 +162,6 @@ class GameClient:
         try:
             GameClient.__send_request__(self.__client_socket, GameClient.ActionType.GAME_STATE)
             result_enum, json_game_state = GameClient.__process_response__(self.__client_socket)
-            print("Game State request result:", result_enum.name)
 
             if result_enum == GameClient.Result.OKEY:
                 self.__turns = json_game_state["num_turns"]
@@ -178,8 +173,7 @@ class GameClient:
                 self.__players.clear()
                 for player in json_game_state["players"]:
                     # TODO: creates only BOTs, need default player for opponents
-                    self.__players.append(Bot(player["idx"], player["name"], player["is_observer"], self))
-                    print("Player in game: ", player["idx"], player["name"])
+                    self.__players.append(RealPlayer(player["idx"], player["name"], player["is_observer"]))
                 vehicles = json_game_state["vehicles"]
                 # key: vehicle id, value: vehicle features as dictionary
                 for vehicle_id, vehicle_features in vehicles.items():
@@ -212,13 +206,14 @@ class GameClient:
                 # TODO: spawns
                 map_content: Dict[str, Any] = json_data["content"]
                 base: List[Dict[str, int]] = map_content["base"]
-                obstacles: List[Dict[str, int]] = map_content["obstacle"]
+                # TODO: fix KeyError: 'obstacle'
+                #obstacles: List[Dict[str, int]] = map_content["obstacle"]
                 self.__base.clear()
                 for base_cell in base:
                     self.__base.append((base_cell["x"], base_cell["y"]))
-                self.__obstacles.clear()
-                for obstacle_cell in obstacles:
-                    self.__obstacles.append((obstacle_cell["x"], obstacle_cell["y"]))
+                # self.__obstacles.clear()
+                # for obstacle_cell in obstacles:
+                #     self.__obstacles.append((obstacle_cell["x"], obstacle_cell["y"]))
         except socket.error as e:
             print(f"Socket error: {e}")
 
@@ -241,13 +236,58 @@ class GameClient:
         type_: GameClient.ActionType = GameClient.ActionType.MOVE
         player: Player = self.__find_player__(self.__client_player_id)
         vehicle: Tank = player.tanks[0]
-        x: int = int(input())
-        y: int = int(input())
-        target: Tuple[int, int] = x, y
-        return GameClient.Action(type_, player, vehicle, target)
+        x, y = vehicle.curr_position
+        z = -x - y
+        print("Cur pos: ", x, y, z)
+        if x == 0 and y == 0 and z == 0:
+            return GameClient.Action(type_, player, vehicle)
+        # Calculate the differences between current position and origin
+        dist_x = abs(x)
+        dist_y = abs(y)
+        dist_z = abs(z)
+        if dist_x >= dist_y and dist_x >= dist_z:
+            if dist_y > dist_z:
+                if x > 0:
+                    x -= 1
+                    y += 1
+                else:
+                    x += 1
+                    y -= 1
+            elif x > 0:
+                x -= 1
+            else:
+                x += 1
+        elif dist_y >= dist_x and dist_y >= dist_z:
+            if dist_x > dist_z:
+                if y > 0:
+                    y -= 1
+                    x += 1
+                else:
+                    y += 1
+                    x -= 1
+            elif y > 0:
+                y -= 1
+            else:
+                y += 1
+        else:
+            if dist_y > dist_x:
+                if z > 0:
+                    y += 1
+                else:
+                    y -= 1
+            elif z > 0:
+                x += 1
+            else:
+                x -= 1
+        return GameClient.Action(type_, player, vehicle, (x, y))
 
     def play_turn(self):
         action: GameClient.Action = self.__get_turn__()
+        if not action.target:
+            GameClient.__send_request__(self.__client_socket, GameClient.ActionType.TURN)
+            result_enum, _ = GameClient.__process_response__(self.__client_socket)
+            print("End of turn send", result_enum.name)
+            return
         # I don't know if we have to do that in client logic
         # self.__execute_action__(action)
         # send the action to the server
@@ -313,6 +353,15 @@ class GameClient:
 
     def get_base(self) -> List[Tuple[int, int]]:
         return self.__base
+
+    def get_cur_turn(self) -> int:
+        return self.__cur_turn
+
+    def get_turns_num(self) -> int:
+        return self.__turns
+
+    def get_round(self) -> int:
+        return self.__cur_round
 
 
 def main():
