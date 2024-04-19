@@ -17,8 +17,8 @@ class GameClient:  # Temp class
 
 
 class Bot(Player):
-    def __init__(self, id, name, game: GameClient):
-        super().__init__(id, name)
+    def __init__(self, id, name, is_observer: bool, game: GameClient):
+        super().__init__(id, name, is_observer)
         self.__client = game
         self.__paths: List[List[Tuple[int, int]]] = [None] * len(self.vehicles)
 
@@ -81,3 +81,8 @@ class Bot(Player):
                 self.vehicles[i].move(self.__paths[i][len(self.__paths[i]) - dist])
                 for j in range(dist):
                     self.__paths[i].pop()
+
+    def add_tank(self, tank: Tank):
+        # Implementation of adding tank
+        if tank not in self.tanks:
+            self.tanks.append(tank)

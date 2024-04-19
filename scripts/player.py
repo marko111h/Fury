@@ -11,7 +11,7 @@ from connection_to_server.server_communication import (
     move_request,
     shoot_request
 )
-from tank import Tank
+from scripts.tank import Tank
 # from game_logic import GameLogic
 
 
@@ -39,21 +39,21 @@ class Player(ABC):
 
 
     # Function to decide if a player can attack an opponent according to the rules of neutrality
-    @abstractmethod
-    def should_attack_enemy(self, game_logic):
-        pass
+    # @abstractmethod
+    # def should_attack_enemy(self, game_logic):
+    #     pass
 
 
-    @abstractmethod
-    def attack_enemy(self, tank_data, game_logic, sock):
-        """Allows the player to attack an enemy using their tank."""
-        pass
+    # @abstractmethod
+    # def attack_enemy(self, tank_data, game_logic, sock):
+    #     """Allows the player to attack an enemy using their tank."""
+    #     pass
 
 
-    @abstractmethod
-    def move_towards_base(self, tank_data, game_logic, sock):
-        """Allows the player to move their tank towards the base."""
-        pass
+    # @abstractmethod
+    # def move_towards_base(self, tank_data, game_logic, sock):
+    #     """Allows the player to move their tank towards the base."""
+    #     pass
 
 
     @abstractmethod
@@ -66,9 +66,9 @@ class Player(ABC):
     # def calculate_move_direction(self, current_position, base_position):
 
 
-    @abstractmethod
-    def choose_enemy_to_attack(self, game_logic):
-        pass
+    # @abstractmethod
+    # def choose_enemy_to_attack(self, game_logic):
+    #     pass
 
 
 

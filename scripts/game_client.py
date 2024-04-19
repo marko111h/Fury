@@ -1,4 +1,4 @@
-from grid import Grid
+from scripts.grid import Grid
 from typing import List, Tuple, Optional, Dict, Any
 import json
 import socket
@@ -8,7 +8,7 @@ from scripts.player import Player
 from scripts.real_player import RealPlayer
 from scripts.tank import Tank
 from scripts.medium_tank import MediumTank
-from bot import Bot
+from scripts.bot import Bot
 
 
 class GameClient:
@@ -45,16 +45,12 @@ class GameClient:
             self.vehicle: Tank = vehicle
             self.target: Tuple[int, int] = target
 
-    def __init__(self, client_player: Player, client_socket: socket):
+    def __init__(self, client_player_id: int, client_socket: socket):
         self.__client_socket: socket = client_socket
-        self.__client_player: Player = client_player
+        self.__client_player_id: int = client_player_id
         self.__grid: Grid = Grid(0)
         self.__players: List[Player] = []
         self.observers: List[Player] = []
-        if not self.__client_player.is_observer:
-            self.__players.append(self.__client_player)
-        else:
-            self.observers.append(self.__client_player)
 
         self.__players_capturing_base: List[Player] = []
         self.__base: List[Tuple[int, int]] = [(0, 0)]
@@ -131,7 +127,6 @@ class GameClient:
                            if value is not None}
         # separators to remove spaces between key and value
         json_params: str = json.dumps(filtered_params, separators=(',', ':'))
-
         client_socket: socket = None
         try:
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -141,17 +136,16 @@ class GameClient:
             # gets response from the server
             result_enum, json_data = GameClient.__process_response__(client_socket)
 
-            print("Login result:", result_enum.name)
-
             if result_enum != GameClient.Result.OKEY:
                 return None
+
             player_id: int = json_data["idx"]
             player_name: str = json_data["name"]
             is_observer: bool = json_data["is_observer"]
             print("Logged in player")
             print("Name:", player_name, ", id:", player_id)
             # TODO: create game with provided through args settings
-            return GameClient(RealPlayer(player_id, player_name, is_observer), client_socket)
+            return GameClient(player_id, client_socket)
         except socket.error as e:
             print(f"Socket error: {e}")
             return None
@@ -180,21 +174,24 @@ class GameClient:
                 self.__cur_turn = json_game_state["current_turn"]
                 self.__cur_round = json_game_state["current_round"]
 
+                # clears players list in order to update with server data
+                self.__players.clear()
                 for player in json_game_state["players"]:
-                    if self.__client_player.id != player["idx"]:
-                        self.__players.append(RealPlayer(player["idx"], player["name"], player["is_observer"]))
-                        print(player["idx"], player["name"])
+                    # TODO: creates only BOTs, need default player for opponents
+                    self.__players.append(Bot(player["idx"], player["name"], player["is_observer"], self))
+                    print("Player in game: ", player["idx"], player["name"])
                 vehicles = json_game_state["vehicles"]
                 # key: vehicle id, value: vehicle features as dictionary
                 for vehicle_id, vehicle_features in vehicles.items():
                     owner: Player = self.__find_player__(vehicle_features["player_id"])
                     if not owner:
-                        print("No player found error!")
-                        return
+                        print("No vehicle owner found error!")
+                        raise ValueError
                     cur_pos: Tuple[int, int] = (vehicle_features["position"]["x"], vehicle_features["position"]["y"])
                     spawn_pos: Tuple[int, int] = (vehicle_features["spawn_position"]["x"],
                                                   vehicle_features["spawn_position"]["y"])
                     vehicle_type: str = vehicle_features["vehicle_type"]
+                    # TODO: only medium tanks now
                     if vehicle_type == "medium_tank":
                         vehicle: Tank = MediumTank(vehicle_id, cur_pos, spawn_pos, vehicle_features["capture_points"],
                                                    owner, None, 1)
@@ -240,8 +237,17 @@ class GameClient:
                 action.append(GameClient.Action(action_type, player, action_data))
         return actions
 
-    def play_turn(self, action: 'GameClient.Action'):
-        assert (action.player == self.__client_player)
+    def __get_turn__(self) -> Action:
+        type_: GameClient.ActionType = GameClient.ActionType.MOVE
+        player: Player = self.__find_player__(self.__client_player_id)
+        vehicle: Tank = player.tanks[0]
+        x: int = int(input())
+        y: int = int(input())
+        target: Tuple[int, int] = x, y
+        return GameClient.Action(type_, player, vehicle, target)
+
+    def play_turn(self):
+        action: GameClient.Action = self.__get_turn__()
         # I don't know if we have to do that in client logic
         # self.__execute_action__(action)
         # send the action to the server
@@ -299,17 +305,11 @@ class GameClient:
         assert (action.type == GameClient.ActionType.CHAT)
         pass
 
-    # just simple function to send moves to the server
-    def print_pos(self) -> Action:
-        vehicle: Tank = self.__client_player.tanks[0]
-        print(vehicle.id)
-        print(vehicle.curr_position)
-        x = int(input())
-        y = int(input())
-        return GameClient.Action(GameClient.ActionType.MOVE,
-                                 self.__client_player,
-                                 vehicle,
-                                 (x, y))
+    def update_turn(self):
+        self.__cur_turn += 1
+
+    def round_finished(self):
+        return self.__cur_turn == self.__turns
 
     def get_base(self) -> List[Tuple[int, int]]:
         return self.__base
@@ -327,8 +327,6 @@ def main():
 
     game_client: GameClient = GameClient.login(sock, "Boris")
     actions = game_client.get_game_actions()
-    for i in range(3):
-        game_client.play_turn(game_client.print_pos())
     game_client.logout()
     sock.close()
 
