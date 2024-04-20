@@ -17,7 +17,6 @@ def main():
         game_client: GameClient = GameClient.login(sock, "Boris", num_turns=20)
         if not game_client:
             return
-        # TODO: check for winner and process winner and test with 5 capture points
         while not game_client.game_over():
             while not game_client.round_finished():
                 print("Round:", game_client.get_round(), "out of:", game_client.get_rounds())
