@@ -19,12 +19,8 @@ class BotPlayer(Player):
         self.vehicles_in_base = {}  # dictionary  tracks  vehicles in  base
 
 
-    def add_tanks(self, tank_data):
-        # Implementation of adding tanks
-
-        self.tanks.extend(tank_data)
-        print(f"Tank_data: {tank_data} ")
-        print(f"Successfully added {self.tanks} tanks .")
+    def add_tank(self, tank):
+        self.tanks.append(tank)
 
     def play_turn(self, game_logic, sock):
         # Implement bot move logic

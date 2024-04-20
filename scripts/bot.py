@@ -4,6 +4,7 @@ from scripts.bot_player import BotPlayer
 from typing import List, Tuple
 from scripts.tank import Tank
 
+
 class Bot(BotPlayer):
     def __init__(self, id, name):
         super().__init__(id, name)
@@ -11,7 +12,7 @@ class Bot(BotPlayer):
 
     def find_path(self, tank: Tank, client: GameClient) -> List[Tuple[int, int]]:
         gridSize = client.get_grid().get_size()
-        map = [float('inf')] * (gridSize * (gridSize + 1))
+        map = [float('inf')] * gridSize
         tankPos = tank.curr_position
         map[client.get_grid().index_function(tankPos[0], tankPos[1])] = 0
         basePos = None
@@ -23,11 +24,14 @@ class Bot(BotPlayer):
                          Grid.get_point_south_west(currentPos, 1), Grid.get_point_south(currentPos, 1),
                          Grid.get_point_south_east(currentPos, 1), Grid.get_point_south_west(currentPos, -1)]
             for neighbor in neighbors:
-                if neighbor[0] <= gridSize and neighbor[1] <= gridSize and client.get_grid().get(neighbor[0], neighbor[1]) is None:
+                if neighbor[0] <= gridSize and neighbor[1] <= gridSize and client.get_grid().get(neighbor[0],
+                                                                                                 neighbor[1]) is None:
                     if float('inf') > map[client.get_grid().index_function(neighbor[0], neighbor[1])] > 0:
                         queue.append(neighbor)
-                    if map[client.get_grid().index_function(neighbor[0], neighbor[1])] + 1 < map[client.get_grid().index_function(currentPos[0], currentPos[1])]:
-                        map[client.get_grid().index_function(currentPos[0], currentPos[1])] = map[client.get_grid().index_function(neighbor[0], neighbor[1])] + 1
+                    if map[client.get_grid().index_function(neighbor[0], neighbor[1])] + 1 < map[
+                        client.get_grid().index_function(currentPos[0], currentPos[1])]:
+                        map[client.get_grid().index_function(currentPos[0], currentPos[1])] = map[client.get_grid().index_function(
+                                                                                                      neighbor[0], neighbor[1])] + 1
                     if neighbor in client.get_base():
                         basePos = neighbor
                         queue.clear()
@@ -44,7 +48,8 @@ class Bot(BotPlayer):
                          Grid.get_point_south_west(itr, 1), Grid.get_point_south(itr, 1),
                          Grid.get_point_south_east(itr, 1), Grid.get_point_south_west(itr, -1)]
             for neighbor in neighbors:
-                if map[client.get_grid().index_function(neighbor[0], neighbor[1])] < map[client.get_grid().index_function(itr[0], itr[1])]:
+                if map[client.get_grid().index_function(neighbor[0], neighbor[1])] < map[
+                    client.get_grid().index_function(itr[0], itr[1])]:
                     itr = neighbor
                     break
 
@@ -57,11 +62,10 @@ class Bot(BotPlayer):
         return True
 
     def add_tank(self, tank: Tank):
-        if tank in self.tanks:
-            self.__paths.append(None)
-            self.tanks.remove(tank)
+        self.tanks.append(tank)
 
-    def play_turn(self, client, sock):
+    def play_turn(self, client, socket):
+        turn_actions = []
         while len(self.__paths) < len(self.tanks):
             self.__paths.append(None)
 
@@ -72,7 +76,13 @@ class Bot(BotPlayer):
             if self.__paths[i] is not None:
                 dist = min(self.tanks[i].get_speed_points(), len(self.__paths[i]))
                 if dist == 0:
-                    return
-                self.tanks[i].move(self.__paths[i][len(self.__paths[i]) - dist])
+                    return turn_actions
+                # temporarily commented until game is played on client
+                # self.tanks[i].move(self.__paths[i][len(self.__paths[i]) - dist])
+                turn_actions.append(GameClient.GameAction(GameClient.ActionType.MOVE,
+                                                          self, self.tanks[i],
+                                                          self.__paths[i][len(self.__paths[i]) - dist]))
                 for j in range(dist):
                     self.__paths[i].pop()
+
+        return turn_actions

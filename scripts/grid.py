@@ -1,5 +1,6 @@
 from typing import Tuple
 
+
 class Grid:
     def __init__(self, radius: int):
         self.__radius = radius
@@ -18,6 +19,9 @@ class Grid:
             return 2 * self.__partSize + z * self.__radius + abs(x)
         return 0
 
+    def clear(self):
+        self.__list = [None] * (self.__partSize * 3 + 1)
+
     def get(self, q: int, r: int):
         return self.__list[self.index_function(q, r)]
 
@@ -25,7 +29,7 @@ class Grid:
         self.__list[self.index_function(q, r)] = value
 
     def get_size(self):
-        return self.__radius
+        return len(self.__list)
 
     @staticmethod
     def get_z(q: int, r: int):

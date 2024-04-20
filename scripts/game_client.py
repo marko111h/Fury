@@ -1,9 +1,8 @@
-from scripts.grid import Grid
 from typing import List, Tuple, Optional, Dict, Any
+from enum import Enum
 import json
 import socket
-from enum import Enum
-
+from scripts.grid import Grid
 from scripts.player import Player
 from scripts.real_player import RealPlayer
 from scripts.tank import Tank
@@ -35,7 +34,7 @@ class GameClient:
         SHOOT = 102
 
     # TODO: Make it to support CHAT
-    class Action:
+    class GameAction:
         def __init__(self, action_type: 'GameClient.ActionType', player: Player, vehicle: Tank,
                      target: Tuple[int, int] = None):
             self.type: GameClient.ActionType = action_type
@@ -75,7 +74,6 @@ class GameClient:
                           + len(json_data).to_bytes(4, byteorder="little"))
         if json_data != "":
             request += json_data.encode('utf-8')
-        print(request)
         client_socket.sendall(request)
 
     @staticmethod
@@ -90,7 +88,6 @@ class GameClient:
         result_enum: GameClient.Result = GameClient.Result(
             int.from_bytes(result_code, byteorder="little")
         )
-        print("Result of request:", result_enum)
         # Read the length of JSON with data
         json_data_length: int = int.from_bytes(client_socket.recv(4), byteorder="little")
         # Check if there is additional data
@@ -179,6 +176,14 @@ class GameClient:
                                            owner, None, 1)
                 owner.add_tank(vehicle)
 
+    # TODO: add obstacles
+    def __fill_grid__(self):
+        self.__grid.clear()
+        for player in self.__players:
+            for vehicle in player.tanks:
+                q, r = vehicle.curr_position
+                self.__grid.set(q, r, vehicle)
+
     def update_game_state(self) -> None:
         """ Updates the state of the game by requesting GAME_STATE
         """
@@ -233,16 +238,17 @@ class GameClient:
                 # self.__obstacles.clear()
                 # for obstacle_cell in obstacles:
                 #     self.__obstacles.append((obstacle_cell["x"], obstacle_cell["y"]))
+                self.__fill_grid__()
         except socket.error as e:
             print(f"Socket error: {e}")
 
-    def get_game_actions(self) -> Optional[List['GameClient.Action']]:
+    def get_game_actions(self) -> Optional[List['GameClient.GameAction']]:
         """ Requests game actions from the server and returns them
         @:return returns list of actions got from server
         """
         GameClient.__send_request__(self.__client_socket, GameClient.ActionType.GAME_ACTIONS)
         result_enum, json_data = GameClient.__get_response__(self.__client_socket)
-        actions: List[GameClient.Action] = []
+        actions: List[GameClient.GameAction] = []
         if result_enum != GameClient.Result.OKEY:
             # print error code
             print(json_data)
@@ -257,10 +263,12 @@ class GameClient:
             if not vehicle:
                 raise ValueError
             target: Tuple[int, int] = action_data["target"]["x"], action_data["target"]["y"]
-            action.append(GameClient.Action(action_type, player, vehicle, target))
+            action.append(GameClient.GameAction(action_type, player, vehicle, target))
         return actions
 
-    def __get_turn__(self) -> Action:
+    def __get_turn__(self) -> GameAction:
+        """ @Murlokich bot, just goes to the center, doesn't check anything
+        """
         type_: GameClient.ActionType = GameClient.ActionType.MOVE
         player: Player = self.__find_player__(self.__client_player_id)
         vehicle: Tank = player.tanks[0]
@@ -268,7 +276,7 @@ class GameClient:
         z = -x - y
         print("Cur pos: ", x, y, z)
         if x == 0 and y == 0 and z == 0:
-            return GameClient.Action(type_, player, vehicle)
+            return GameClient.GameAction(type_, player, vehicle)
         # Calculate the differences between current position and origin
         dist_x = abs(x)
         dist_y = abs(y)
@@ -307,7 +315,7 @@ class GameClient:
                 x += 1
             else:
                 x -= 1
-        return GameClient.Action(type_, player, vehicle, (x, y))
+        return GameClient.GameAction(type_, player, vehicle, (x, y))
 
     def send_turn_end(self) -> None:
         """ Send TURN request to the server
@@ -316,74 +324,64 @@ class GameClient:
         result_enum, _ = GameClient.__get_response__(self.__client_socket)
         print("End of turn send", result_enum.name)
 
-    def play_turn(self) -> None:
+    def play_turn(self, turn_actions: List[GameAction]):
         """ Plays turn from client
         """
-        action: GameClient.Action = self.__get_turn__()
-        if not action.target:
-            self.send_turn_end()
-            return
         # I don't know if we have to do that in client logic
         # self.__execute_action__(action)
         # send the action to the server
-
-        # make dict for future json
-        action_data_dict: Dict[str, Any] = {
-            "vehicle_id": action.vehicle.id,
-            "target": {
-                "x": action.target[0],
-                "y": action.target[1],
-                "z": Grid.get_z(action.target[0], action.target[1])
+        for action in turn_actions:
+            # make dict for future json
+            action_data_dict: Dict[str, Any] = {
+                "vehicle_id": action.vehicle.id,
+                "target": {
+                    "x": action.target[0],
+                    "y": action.target[1],
+                    "z": Grid.get_z(action.target[0], action.target[1])
+                }
             }
-        }
-        action_data_json: str = json.dumps(action_data_dict, separators=(',', ':'))
-        GameClient.__send_request__(self.__client_socket, action.type, action_data_json)
-        result_enum, _ = GameClient.__get_response__(self.__client_socket)
-        print("Move result", result_enum.name)
-        if result_enum == GameClient.Result.OKEY:
-            self.send_turn_end()
-        else:
-            print("Something went wrong, turn wasn't played")
+            action_data_json: str = json.dumps(action_data_dict, separators=(',', ':'))
+            GameClient.__send_request__(self.__client_socket, action.type, action_data_json)
+            result_enum, error_code = GameClient.__get_response__(self.__client_socket)
+            print("Move result", result_enum.name)
+            if result_enum != GameClient.Result.OKEY:
+                print(error_code)
+        self.send_turn_end()
 
-    def __execute_action__(self, action: 'GameClient.Action'):
-        if action.type == GameClient.ActionType.MOVE:
-            self.__execute_move__(action)
-        elif action.type == GameClient.ActionType.SHOOT:
-            self.__execute_shoot__(action)
-        # TODO: chat action
-        elif action.type == GameClient.ActionType.CHAT:
-            pass
-        else:
-            # Not a game action
-            raise ValueError
+    # def __execute_action__(self, action: 'GameClient.GameAction'):
+    #     if action.type == GameClient.ActionType.MOVE:
+    #         self.__execute_move__(action)
+    #     elif action.type == GameClient.ActionType.SHOOT:
+    #         self.__execute_shoot__(action)
+    #     # TODO: chat action
+    #     elif action.type == GameClient.ActionType.CHAT:
+    #         pass
+    #     else:
+    #         # Not a game action
+    #         raise ValueError
 
     # TODO: mb add inheritance and execute() overridden method
-    def __execute_move__(self, action: 'GameClient.Action'):
-        assert (action.type == GameClient.ActionType.MOVE)
-        action.vehicle.move(action.target)
+    # def __execute_move__(self, action: 'GameClient.GameAction'):
+    #     assert (action.type == GameClient.ActionType.MOVE)
+    #     action.vehicle.move(action.target)
 
-    def __execute_shoot__(self, action: 'GameClient.Action'):
-        assert (action.type == GameClient.ActionType.SHOOT)
-        # TODO: make method shoot take coordinates of the cell
-        target: Optional[Tank] = None
-        for player in self.__players:
-            if player == action.player:
-                continue
-            for vehicle in player.tanks:
-                if vehicle.curr_position == action.target:
-                    target = vehicle
-        if not target:
-            raise ValueError
-        action.vehicle.shoot(target)
+    # def __execute_shoot__(self, action: 'GameClient.GameAction'):
+    #     assert (action.type == GameClient.ActionType.SHOOT)
+    #     # TODO: make method shoot take coordinates of the cell
+    #     target: Optional[Tank] = None
+    #     for player in self.__players:
+    #         if player == action.player:
+    #             continue
+    #         for vehicle in player.tanks:
+    #             if vehicle.curr_position == action.target:
+    #                 target = vehicle
+    #     if not target:
+    #         raise ValueError
+    #     action.vehicle.shoot(target)
 
-    def __execute_chat__(self, action: Action):
-        assert (action.type == GameClient.ActionType.CHAT)
-        pass
-
-    def update_turn(self) -> None:
-        """ Increases cur_turn by 1
-        """
-        self.__cur_turn += 1
+    # def __execute_chat__(self, action: GameAction):
+    #     assert (action.type == GameClient.ActionType.CHAT)
+    #     pass
 
     def round_finished(self):
         return self.__round_finished
@@ -408,3 +406,18 @@ class GameClient:
 
     def get_rounds(self) -> int:
         return self.__rounds
+
+    def get_grid(self):
+        return self.__grid
+
+    def get_client_player_id(self) -> int:
+        return self.__client_player_id
+
+    # remove later
+    def update_bot(self, bot: Player):
+        """ Updates bot's internal state according to server.
+        """
+        bot.tanks.clear()
+        player_in_game: Player = self.__find_player__(self.__client_player_id)
+        for vehicle in player_in_game.tanks:
+            bot.add_tank(vehicle)
