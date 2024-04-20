@@ -50,14 +50,15 @@ class GameClient:
         self.__grid: Grid = Grid(0)
         self.__players: List[Player] = []
         self.observers: List[Player] = []
-
         self.__players_capturing_base: List[Player] = []
+        self.__winner: Optional[Player] = None
         self.__base: List[Tuple[int, int]] = [(0, 0)]
         self.__name: Optional[str] = None
         self.__rounds: int = 15
         self.__turns: int = 10
         self.__cur_round: int = 1  # rounds start with 1
         self.__cur_turn: int = 0  # turns start with 0
+        self.__round_finished: bool = False
         self.__cur_player_index: int = 0
         self.__obstacles: List[Tuple[int, int]] = []
 
@@ -174,6 +175,7 @@ class GameClient:
                 for player in json_game_state["players"]:
                     # TODO: creates only BOTs, need default player for opponents
                     self.__players.append(RealPlayer(player["idx"], player["name"], player["is_observer"]))
+                self.__round_finished = json_game_state["finished"]
                 vehicles = json_game_state["vehicles"]
                 # key: vehicle id, value: vehicle features as dictionary
                 for vehicle_id, vehicle_features in vehicles.items():
@@ -192,6 +194,9 @@ class GameClient:
                         owner.add_tank(vehicle)
                 # TODO: order players correctly, finished, attack matrix, winner, win_points
                 # TODO: player_result_points, catapult_usage
+            winner_id: Optional[int] = json_game_state["winner"]
+            if winner_id:
+                self.__winner = self.__find_player__(winner_id)
         except socket.error as e:
             print(f"Socket error: {e}")
 
@@ -207,7 +212,7 @@ class GameClient:
                 map_content: Dict[str, Any] = json_data["content"]
                 base: List[Dict[str, int]] = map_content["base"]
                 # TODO: fix KeyError: 'obstacle'
-                #obstacles: List[Dict[str, int]] = map_content["obstacle"]
+                # obstacles: List[Dict[str, int]] = map_content["obstacle"]
                 self.__base.clear()
                 for base_cell in base:
                     self.__base.append((base_cell["x"], base_cell["y"]))
@@ -229,6 +234,7 @@ class GameClient:
                 player: Optional[RealPlayer] = self.__find_player__(action["player_id"])
                 action_type: GameClient.ActionType = GameClient.ActionType(action["action_type"])
                 action_data: str = action["data"]
+                # TODO parse action data
                 action.append(GameClient.Action(action_type, player, action_data))
         return actions
 
@@ -281,12 +287,15 @@ class GameClient:
                 x -= 1
         return GameClient.Action(type_, player, vehicle, (x, y))
 
+    def send_turn_end(self) -> None:
+        GameClient.__send_request__(self.__client_socket, GameClient.ActionType.TURN)
+        result_enum, _ = GameClient.__process_response__(self.__client_socket)
+        print("End of turn send", result_enum.name)
+
     def play_turn(self):
         action: GameClient.Action = self.__get_turn__()
         if not action.target:
-            GameClient.__send_request__(self.__client_socket, GameClient.ActionType.TURN)
-            result_enum, _ = GameClient.__process_response__(self.__client_socket)
-            print("End of turn send", result_enum.name)
+            self.send_turn_end()
             return
         # I don't know if we have to do that in client logic
         # self.__execute_action__(action)
@@ -304,9 +313,7 @@ class GameClient:
         result_enum, _ = GameClient.__process_response__(self.__client_socket)
         print("Move result", result_enum.name)
         if result_enum == GameClient.Result.OKEY:
-            GameClient.__send_request__(self.__client_socket, GameClient.ActionType.TURN)
-            result_enum, _ = GameClient.__process_response__(self.__client_socket)
-            print("End of turn send", result_enum.name)
+            self.send_turn_end()
         else:
             print("Something went wrong, turn wasn't played")
 
@@ -349,7 +356,7 @@ class GameClient:
         self.__cur_turn += 1
 
     def round_finished(self):
-        return self.__cur_turn == self.__turns
+        return self.__round_finished
 
     def get_base(self) -> List[Tuple[int, int]]:
         return self.__base
@@ -363,22 +370,11 @@ class GameClient:
     def get_round(self) -> int:
         return self.__cur_round
 
+    def get_winner(self) -> Optional[Player]:
+        return self.__winner
 
-def main():
-    # def address and port server
-    server_address = ("wgforge-srv.wargaming.net", 443)
+    def game_over(self) -> bool:
+        return self.__round_finished and self.__cur_round == self.__rounds
 
-    # create sock connection
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    # connect on server
-    sock.connect(server_address)
-
-    game_client: GameClient = GameClient.login(sock, "Boris")
-    actions = game_client.get_game_actions()
-    game_client.logout()
-    sock.close()
-
-
-if __name__ == "__main__":
-    main()
+    def get_rounds(self) -> int:
+        return self.__rounds
